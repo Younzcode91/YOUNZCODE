@@ -30,13 +30,32 @@ void main() {
     expect(palette.orbit, theme.colorScheme.outline);
   });
 
-  test('dark mode mempertahankan warna kartu agent', () {
-    final palette = AgentWorkingPalette.fromTheme(
-      ThemeData(brightness: Brightness.dark),
-    );
+  test(
+    'dark mode juga memakai warna ThemeData (bukan palet lime terpisah)',
+    () {
+      final theme = ThemeData(
+        brightness: Brightness.dark,
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFF5B9DFF),
+          surface: Color(0xFF10151D),
+          onSurface: Color(0xFFE7ECF3),
+          onSurfaceVariant: Color(0xFF9AA7B8),
+          outline: Color(0xFF232C39),
+          error: Color(0xFFEC6A55),
+        ),
+        dividerColor: const Color(0xFF232C39),
+      );
 
-    expect(palette.background, const Color(0xFF171A12));
-    expect(palette.border, const Color(0xFF3E4432));
-    expect(palette.accent, const Color(0xFFC6F269));
-  });
+      final palette = AgentWorkingPalette.fromTheme(theme);
+
+      // The agent-working card now lives in the same theme world as the app —
+      // a single blue accent, not a separate lime/teal palette.
+      expect(palette.background, theme.colorScheme.surface);
+      expect(palette.border, theme.dividerColor);
+      expect(palette.accent, theme.colorScheme.primary);
+      expect(palette.activity, theme.colorScheme.primary);
+      expect(palette.primaryText, theme.colorScheme.onSurface);
+      expect(palette.orbit, theme.colorScheme.outline);
+    },
+  );
 }

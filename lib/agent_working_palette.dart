@@ -14,31 +14,21 @@ class AgentWorkingPalette {
     required this.orbit,
   });
 
+  // Derived entirely from the theme so the agent-working card lives in the
+  // same calm, single-blue-accent world as the rest of the app — no separate
+  // lime/teal palette competing with the accent.
   factory AgentWorkingPalette.fromTheme(ThemeData theme) {
     final colors = theme.colorScheme;
-    if (theme.brightness == Brightness.light) {
-      return AgentWorkingPalette(
-        background: colors.surface,
-        border: theme.dividerColor,
-        accent: colors.primary,
-        activity: colors.primary,
-        primaryText: colors.onSurface,
-        secondaryText: colors.onSurfaceVariant,
-        mutedText: colors.onSurfaceVariant,
-        error: colors.error,
-        orbit: colors.outline,
-      );
-    }
-    return const AgentWorkingPalette(
-      background: Color(0xFF171A12),
-      border: Color(0xFF3E4432),
-      accent: Color(0xFFC6F269),
-      activity: Color(0xFF79D6CD),
-      primaryText: Color(0xFFE2E4D5),
-      secondaryText: Color(0xFFC4C9B2),
-      mutedText: Color(0xFF8E937F),
-      error: Color(0xFFFF7B72),
-      orbit: Color(0xFF444938),
+    return AgentWorkingPalette(
+      background: colors.surface,
+      border: theme.dividerColor,
+      accent: colors.primary,
+      activity: colors.primary,
+      primaryText: colors.onSurface,
+      secondaryText: colors.onSurfaceVariant,
+      mutedText: colors.onSurfaceVariant,
+      error: colors.error,
+      orbit: colors.outline,
     );
   }
 

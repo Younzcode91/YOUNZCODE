@@ -235,32 +235,45 @@ class _TopWorkspaceBar extends StatelessWidget {
             'YOUNZCODE',
             style: TextStyle(
               color: colors.onSurface,
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.4,
+              fontSize: 14.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.2,
             ),
           ),
-          const SizedBox(width: 20),
-          _WorkspaceTab(
-            label: 'Explorer',
-            active: activeFile == null && !searchMode && !terminalVisible,
-            onTap: onExplorer,
-          ),
-          _WorkspaceTab(
-            label: 'Editor',
-            active: activeFile != null,
-            onTap: onEditor,
-          ),
-          _WorkspaceTab(
-            label: 'Terminal',
-            active: terminalVisible,
-            onTap: onTerminal,
-          ),
-          _WorkspaceTab(
-            key: const ValueKey('show-activity-panel'),
-            label: 'Inspector',
-            active: inspectorVisible,
-            onTap: onInspector,
+          const SizedBox(width: 18),
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: colors.onSurface.withValues(alpha: 0.04),
+              border: Border.all(color: theme.dividerColor),
+              borderRadius: BorderRadius.circular(9),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _WorkspaceTab(
+                  label: 'Explorer',
+                  active: activeFile == null && !searchMode && !terminalVisible,
+                  onTap: onExplorer,
+                ),
+                _WorkspaceTab(
+                  label: 'Editor',
+                  active: activeFile != null,
+                  onTap: onEditor,
+                ),
+                _WorkspaceTab(
+                  label: 'Terminal',
+                  active: terminalVisible,
+                  onTap: onTerminal,
+                ),
+                _WorkspaceTab(
+                  key: const ValueKey('show-activity-panel'),
+                  label: 'Inspector',
+                  active: inspectorVisible,
+                  onTap: onInspector,
+                ),
+              ],
+            ),
           ),
           const Spacer(),
           IconButton(
@@ -309,24 +322,32 @@ class _WorkspaceTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        height: 48,
-        margin: const EdgeInsets.only(right: 12),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: active
-              ? Border(bottom: BorderSide(color: colors.primary, width: 2))
-              : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontFamily: 'Consolas',
-            fontSize: 13,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            color: active ? colors.primary : colors.onSurfaceVariant,
+    final enabled = onTap != null;
+    // A segment inside the top-bar's unified view switcher: the active one
+    // carries the accent-subtle fill, matching the command rail's active state.
+    return Material(
+      color: active
+          ? colors.primary.withValues(alpha: 0.14)
+          : Colors.transparent,
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: 13),
+          alignment: Alignment.center,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+              color: !enabled
+                  ? colors.onSurfaceVariant.withValues(alpha: 0.4)
+                  : active
+                  ? colors.primary
+                  : colors.onSurfaceVariant,
+            ),
           ),
         ),
       ),
@@ -715,14 +736,14 @@ class _FileTreeEntryState extends State<_FileTreeEntry> {
           waitDuration: const Duration(milliseconds: 650),
           child: Material(
             color: Colors.transparent,
-            borderRadius: BorderRadius.circular(5),
+            borderRadius: BorderRadius.circular(6),
             clipBehavior: Clip.hardEdge,
             child: InkWell(
               onTap: _isDirectory
                   ? _toggle
                   : () => widget.onOpenFile(widget.entity.path),
-              highlightColor: const Color(0x3379D6CD),
-              splashColor: const Color(0x4479D6CD),
+              highlightColor: colors.primary.withValues(alpha: 0.10),
+              splashColor: colors.primary.withValues(alpha: 0.16),
               child: SizedBox(
                 height: 28,
                 child: Padding(

@@ -132,9 +132,15 @@ class _ActivityPanel extends StatelessWidget {
                           Container(
                             width: 9,
                             height: 9,
-                            color: busy
-                                ? colors.primary
-                                : const Color(0xFF28C76F),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: busy
+                                  ? colors.primary
+                                  : (Theme.of(context).brightness ==
+                                            Brightness.light
+                                        ? const Color(0xFF2F9E69)
+                                        : const Color(0xFF57C08A)),
+                            ),
                           ),
                           const SizedBox(width: 9),
                           Expanded(
@@ -619,9 +625,9 @@ class _EmptyState extends StatelessWidget {
                     'What are we building?',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: compact ? 32 : 42,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: -1.1,
+                      fontSize: compact ? 27 : 34,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.6,
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -734,9 +740,9 @@ class _MessageCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: user
-                ? light
-                      ? const Color(0xFFE4E8D8)
-                      : const Color(0xFF33362C)
+                ? theme.colorScheme.primary.withValues(
+                    alpha: light ? 0.07 : 0.13,
+                  )
                 : theme.colorScheme.surface,
             border: Border.all(
               color: error
@@ -789,9 +795,8 @@ class _MessageCard extends StatelessWidget {
               SelectableText(
                 displayedContent,
                 style: TextStyle(
-                  height: user ? 1.5 : 1.65,
-                  fontFamily: user ? 'Consolas' : null,
-                  fontSize: user ? null : 14,
+                  height: user ? 1.55 : 1.65,
+                  fontSize: user ? 13.5 : 14,
                 ),
               ),
               if (!user) ...[
@@ -848,7 +853,7 @@ class _ModelBar extends StatelessWidget {
               decoration: BoxDecoration(
                 color: colors.onSurface.withValues(alpha: 0.06),
                 border: Border.all(color: Theme.of(context).dividerColor),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: Row(
                 children: [
@@ -862,7 +867,7 @@ class _ModelBar extends StatelessWidget {
                     child: DropdownButton<String>(
                       key: const ValueKey('model-selector'),
                       value: selectedModel,
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                       dropdownColor: colors.surface,
                       style: TextStyle(
                         fontFamily: 'Consolas',
@@ -892,7 +897,7 @@ class _ModelBar extends StatelessWidget {
                 foregroundColor: colors.primary,
                 side: BorderSide(color: colors.primary.withValues(alpha: 0.45)),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
@@ -1271,18 +1276,14 @@ class _SuggestionCardState extends State<_SuggestionCard> {
           transform: Matrix4.translationValues(0, _pressed ? 2 : 0, 0),
           decoration: BoxDecoration(
             color: _pressed
-                ? light
-                      ? const Color(0xFFDDE3D2)
-                      : const Color(0xFF292D20)
+                ? colors.primary.withValues(alpha: light ? 0.10 : 0.16)
                 : _hovered
-                ? light
-                      ? const Color(0xFFE8ECE1)
-                      : const Color(0xFF22261B)
+                ? colors.primary.withValues(alpha: light ? 0.06 : 0.10)
                 : colors.surface,
             border: Border.all(
               color: _hovered ? colors.primary : theme.dividerColor,
             ),
-            borderRadius: BorderRadius.circular(2),
+            borderRadius: BorderRadius.circular(10),
             boxShadow: _hovered && !_pressed
                 ? const [
                     BoxShadow(
@@ -1296,7 +1297,7 @@ class _SuggestionCardState extends State<_SuggestionCard> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(10),
               onTap: widget.onTap,
               onHighlightChanged: (pressed) =>
                   setState(() => _pressed = pressed),
@@ -1400,6 +1401,7 @@ class _StatusBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final light = theme.brightness == Brightness.light;
     final state = busy
         ? status.toUpperCase()
         : connected
@@ -1410,7 +1412,7 @@ class _StatusBar extends StatelessWidget {
     final color = connected
         ? colors.primary
         : configured
-        ? const Color(0xFFB26A00)
+        ? (light ? const Color(0xFFB7862A) : const Color(0xFFD7A544))
         : colors.onSurfaceVariant;
     return Container(
       key: const ValueKey('status-bar'),
@@ -1469,7 +1471,11 @@ class _StatusBar extends StatelessWidget {
             ),
           ],
           const SizedBox(width: 12),
-          Container(width: 5, height: 5, color: color),
+          Container(
+            width: 7,
+            height: 7,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: color),
+          ),
           const SizedBox(width: 8),
           Text(
             connected ? 'SYNCED' : state,

@@ -265,6 +265,13 @@ class _ExecutionSummary extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final light = theme.brightness == Brightness.light;
+    // Semantic state colours, kept distinct from the single blue accent.
+    final good = light ? const Color(0xFF2F9E69) : const Color(0xFF57C08A);
+    final warn = light ? const Color(0xFFB7862A) : const Color(0xFFD7A544);
+    final bad = cs.error;
     final complete = activities.where((item) => item.completed).length;
     final failedTools = activities.where((item) => item.failed).length;
     final warningTools = activities.where((item) => item.warning).length;
@@ -276,36 +283,24 @@ class _ExecutionSummary extends StatelessWidget {
         : '${failedTools == 0 ? '' : ' · $failedTools failed'}'
               '${warningTools == 0 ? '' : ' · $warningTools skipped'}';
     final status = switch (turnState) {
-      _AgentTurnState.success => (
-        'STATUS: SUCCESS',
-        Icons.check_circle,
-        const Color(0xFFC6F269),
-      ),
+      _AgentTurnState.success => ('STATUS: SUCCESS', Icons.check_circle, good),
       _AgentTurnState.cancelled => (
         'STATUS: CANCELLED',
         Icons.stop_circle_outlined,
-        const Color(0xFFFFC857),
+        warn,
       ),
       _AgentTurnState.timedOut => (
         'STATUS: TIMED OUT',
         Icons.timer_off_outlined,
-        const Color(0xFFFF7B72),
+        bad,
       ),
       _AgentTurnState.paused => (
         'STATUS: CHECKPOINT SAVED',
         Icons.pause_circle_outline,
-        const Color(0xFFFFC857),
+        warn,
       ),
-      _AgentTurnState.failed => (
-        'STATUS: FAILED',
-        Icons.error_outline,
-        const Color(0xFFFF7B72),
-      ),
-      _ => (
-        'STATUS: COMPLETED WITH ERRORS',
-        Icons.error_outline,
-        const Color(0xFFFF7B72),
-      ),
+      _AgentTurnState.failed => ('STATUS: FAILED', Icons.error_outline, bad),
+      _ => ('STATUS: COMPLETED WITH ERRORS', Icons.error_outline, bad),
     };
     final canRetry =
         onRetry != null &&
@@ -320,8 +315,9 @@ class _ExecutionSummary extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 18),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2117),
-        border: Border.all(color: const Color(0xFF444938)),
+        color: cs.surface,
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -362,10 +358,10 @@ class _ExecutionSummary extends StatelessWidget {
             '${activities.length} tool events · $complete completed'
             '$activityOutcome · '
             '${duration.inSeconds}s',
-            style: const TextStyle(
+            style: TextStyle(
               fontFamily: 'Consolas',
               fontSize: 11,
-              color: Color(0xFFC4C9B2),
+              color: cs.onSurfaceVariant,
             ),
           ),
           if (activities.isNotEmpty) ...[
@@ -377,14 +373,15 @@ class _ExecutionSummary extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF171A12),
+                  color: cs.onSurface.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border(
                     left: BorderSide(
                       color: activity.failed
-                          ? const Color(0xFFFF7B72)
+                          ? bad
                           : activity.warning
-                          ? const Color(0xFFFFC857)
-                          : const Color(0xFFC6F269),
+                          ? warn
+                          : good,
                       width: 2,
                     ),
                   ),
@@ -396,11 +393,11 @@ class _ExecutionSummary extends StatelessWidget {
                       width: 58,
                       child: Text(
                         activity.label,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontFamily: 'Consolas',
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF79D6CD),
+                          color: cs.primary,
                         ),
                       ),
                     ),
@@ -412,10 +409,10 @@ class _ExecutionSummary extends StatelessWidget {
                           fontSize: 10,
                           height: 1.4,
                           color: activity.failed
-                              ? const Color(0xFFFF7B72)
+                              ? bad
                               : activity.warning
-                              ? const Color(0xFFFFC857)
-                              : const Color(0xFFE2E4D5),
+                              ? warn
+                              : cs.onSurface,
                         ),
                       ),
                     ),
@@ -474,12 +471,14 @@ class _ExecutionSummaryToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final light = theme.brightness == Brightness.light;
     final color = turnState == _AgentTurnState.success
-        ? const Color(0xFFC6F269)
+        ? (light ? const Color(0xFF2F9E69) : const Color(0xFF57C08A))
         : turnState == _AgentTurnState.cancelled ||
               turnState == _AgentTurnState.paused
-        ? const Color(0xFFFFC857)
-        : const Color(0xFFFF7B72);
+        ? (light ? const Color(0xFFB7862A) : const Color(0xFFD7A544))
+        : theme.colorScheme.error;
     final label = turnState == _AgentTurnState.success
         ? 'SUCCESS'
         : turnState.name.toUpperCase();
