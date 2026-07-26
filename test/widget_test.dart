@@ -121,7 +121,7 @@ void main() {
     expect(find.byKey(const ValueKey('command-rail')), findsOneWidget);
     expect(find.byKey(const ValueKey('top-workspace-bar')), findsOneWidget);
     expect(find.byKey(const ValueKey('workspace-explorer')), findsOneWidget);
-    expect(find.textContaining('Build: v1.0.1'), findsOneWidget);
+    expect(find.textContaining('Build: v1.1.0'), findsOneWidget);
     expect(find.text('AGENT SESSION'), findsNothing);
     expect(find.text('YOUNZCODE DESKTOP'), findsNothing);
     expect(find.byKey(const ValueKey('model-selector')), findsOneWidget);

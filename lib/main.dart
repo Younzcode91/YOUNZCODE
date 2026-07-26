@@ -144,40 +144,45 @@ class _KodeAgentAppState extends State<KodeAgentApp> {
   }
 
   ThemeData _buildTheme({required bool light}) {
+    // Calm dev-tool palette: slate ground + a single blue accent. Semantic
+    // colours (success/warning/error) live outside the accent and are applied
+    // per-widget, so the accent never competes with a second decorative hue.
     final scheme = light
         ? const ColorScheme.light(
-            primary: Color(0xFF4F378A),
-            secondary: Color(0xFF63597C),
-            tertiary: Color(0xFF765B00),
-            surface: Color(0xFFFDF7FF),
-            onSurface: Color(0xFF1D1B20),
-            onSurfaceVariant: Color(0xFF494551),
-            outline: Color(0xFF7A7582),
-            error: Color(0xFFBA1A1A),
+            primary: Color(0xFF2F6FE0),
+            onPrimary: Color(0xFFFFFFFF),
+            secondary: Color(0xFF55627A),
+            tertiary: Color(0xFF2F6FE0),
+            surface: Color(0xFFFFFFFF),
+            onSurface: Color(0xFF1A222E),
+            onSurfaceVariant: Color(0xFF55627A),
+            outline: Color(0xFFDDE3EC),
+            error: Color(0xFFD64A34),
           )
         : const ColorScheme.dark(
-            primary: Color(0xFFCFBCFF),
-            secondary: Color(0xFFCDC0E9),
-            tertiary: Color(0xFFE7C365),
-            surface: Color(0xFF1D1B20),
-            onSurface: Color(0xFFE6E1E5),
-            onSurfaceVariant: Color(0xFFC9C5D0),
-            outline: Color(0xFF938F99),
-            error: Color(0xFFFFB4AB),
+            primary: Color(0xFF5B9DFF),
+            onPrimary: Color(0xFFFFFFFF),
+            secondary: Color(0xFF9AA7B8),
+            tertiary: Color(0xFF8AB4F0),
+            surface: Color(0xFF10151D),
+            onSurface: Color(0xFFE7ECF3),
+            onSurfaceVariant: Color(0xFF9AA7B8),
+            outline: Color(0xFF232C39),
+            error: Color(0xFFEC6A55),
           );
-    final border = light ? const Color(0xFFCBC4D2) : const Color(0xFF49454F);
-    final input = light ? const Color(0xFFFFFFFF) : const Color(0xFF211F26);
+    final border = light ? const Color(0xFFDDE3EC) : const Color(0xFF232C39);
+    final input = light ? const Color(0xFFFFFFFF) : const Color(0xFF0D1117);
     return ThemeData(
       brightness: light ? Brightness.light : Brightness.dark,
       scaffoldBackgroundColor: light
-          ? const Color(0xFFFDF7FF)
-          : const Color(0xFF141218),
+          ? const Color(0xFFF3F5F9)
+          : const Color(0xFF0D1117),
       colorScheme: scheme,
       fontFamily: 'Inter',
       dividerColor: border,
       textTheme: const TextTheme(
-        bodyMedium: TextStyle(fontSize: 14, height: 1.42),
-        bodySmall: TextStyle(fontSize: 12, height: 1.34),
+        bodyMedium: TextStyle(fontSize: 13.5, height: 1.5),
+        bodySmall: TextStyle(fontSize: 12, height: 1.42),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -187,27 +192,27 @@ class _KodeAgentAppState extends State<KodeAgentApp> {
           vertical: 12,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(4),
-          borderSide: BorderSide(color: scheme.primary, width: 2),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: scheme.primary, width: 1.6),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           textStyle: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.8,
+            fontSize: 12.5,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.2,
           ),
-          elevation: 2,
+          elevation: 0,
           animationDuration: _fastMotion,
         ),
       ),
@@ -249,7 +254,7 @@ class _KodeAgentAppState extends State<KodeAgentApp> {
           color: light ? const Color(0xFF322F35) : const Color(0xFF36343B),
           border: Border.all(color: border),
         ),
-        textStyle: const TextStyle(fontSize: 11, color: Color(0xFFE2E4D5)),
+        textStyle: const TextStyle(fontSize: 11, color: Color(0xFFE7ECF3)),
       ),
       dialogTheme: const DialogThemeData(
         shape: RoundedRectangleBorder(
