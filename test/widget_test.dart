@@ -474,7 +474,7 @@ void main() {
 
     await tester.tap(find.byKey(const ValueKey('provider-preset')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Google Gemini').last);
+    await tester.tap(find.text('Google Gemini (OpenAI-compatible)').last);
     await tester.pumpAndSettle();
 
     // Base URL auto-filled and example models loaded.
@@ -483,6 +483,26 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('gemini-2.5-pro'), findsWidgets);
+  });
+
+  testWidgets('preset Anthropic native mengisi Base URL dan model native', (
+    tester,
+  ) async {
+    _setMockPreferences({});
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    await tester.tap(find.text('MANAGE MODELS'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('provider-preset')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Anthropic Claude (native)').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('https://api.anthropic.com'), findsOneWidget);
+    expect(find.text('claude-opus-4-8'), findsWidgets);
   });
 
   testWidgets(
