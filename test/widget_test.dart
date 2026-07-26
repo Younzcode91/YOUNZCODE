@@ -470,6 +470,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('MODEL CONNECTION'), findsOneWidget);
     expect(find.byKey(const ValueKey('provider-preset')), findsOneWidget);
+    expect(find.byKey(const ValueKey('fetch-models-button')), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('provider-preset')));
     await tester.pumpAndSettle();

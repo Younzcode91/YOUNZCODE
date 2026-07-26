@@ -20,6 +20,7 @@ import 'lottie_support.dart';
 import 'services/agent_service.dart';
 import 'services/addon_service.dart';
 import 'services/approval_mode.dart';
+import 'services/provider_catalog.dart';
 import 'services/chat_session_store.dart';
 import 'services/debug_adapter_service.dart';
 import 'services/settings_store.dart';
@@ -5880,6 +5881,8 @@ class _ModelDialogState extends State<_ModelDialog> {
   late final List<String> _models = [...widget.models];
   late String _selectedModel = widget.selectedModel;
   late String _providerLabel = _presetForBaseUrl(widget.baseUrl).label;
+  bool _fetchingModels = false;
+  String? _fetchError;
 
   @override
   void initState() {
@@ -5922,6 +5925,38 @@ class _ModelDialogState extends State<_ModelDialog> {
       _selectedModel = model;
       _newModelController.clear();
     });
+  }
+
+  Future<void> _fetchModels() async {
+    final baseUrl = _baseController.text.trim();
+    if (baseUrl.isEmpty || _fetchingModels) return;
+    setState(() {
+      _fetchingModels = true;
+      _fetchError = null;
+    });
+    try {
+      final fetched = await fetchProviderModels(
+        baseUrl,
+        _keyController.text.trim(),
+      );
+      if (!mounted) return;
+      setState(() {
+        if (fetched.isEmpty) {
+          _fetchError = 'Endpoint tidak mengembalikan daftar model.';
+          return;
+        }
+        // Merge so manually-added models are not lost.
+        final merged = {..._models, ...fetched}.toList()..sort();
+        _models
+          ..clear()
+          ..addAll(merged);
+        if (!_models.contains(_selectedModel)) _selectedModel = _models.first;
+      });
+    } catch (error) {
+      if (mounted) setState(() => _fetchError = 'Gagal memuat model: $error');
+    } finally {
+      if (mounted) setState(() => _fetchingModels = false);
+    }
   }
 
   void _removeModel(String model) {
@@ -6053,7 +6088,38 @@ class _ModelDialogState extends State<_ModelDialog> {
                       ),
                     ),
                     const SizedBox(height: 18),
-                    const _FieldLabel('AVAILABLE MODELS'),
+                    Row(
+                      children: [
+                        const _FieldLabel('AVAILABLE MODELS'),
+                        const Spacer(),
+                        if (_fetchingModels)
+                          const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 1.5),
+                          )
+                        else
+                          TextButton.icon(
+                            key: const ValueKey('fetch-models-button'),
+                            onPressed: _fetchModels,
+                            icon: const Icon(
+                              Icons.cloud_download_outlined,
+                              size: 15,
+                            ),
+                            label: const Text(
+                              'FETCH FROM PROVIDER',
+                              style: TextStyle(fontSize: 10),
+                            ),
+                          ),
+                      ],
+                    ),
+                    if (_fetchError != null) ...[
+                      Text(
+                        _fetchError!,
+                        style: TextStyle(fontSize: 11, color: colors.error),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     Container(
                       constraints: const BoxConstraints(maxHeight: 160),
                       decoration: BoxDecoration(
