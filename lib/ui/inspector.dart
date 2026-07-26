@@ -1448,7 +1448,11 @@ class _StatusBar extends StatelessWidget {
                 style: TextStyle(
                   fontFamily: 'Consolas',
                   fontSize: 10,
-                  color: gitStatus.dirty ? colors.tertiary : colors.primary,
+                  color: gitStatus.dirty
+                      ? (light
+                            ? const Color(0xFFB7862A)
+                            : const Color(0xFFD7A544))
+                      : colors.primary,
                 ),
               ),
             ),
@@ -1466,7 +1470,9 @@ class _StatusBar extends StatelessWidget {
                     fontFamily: 'Consolas',
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
-                    color: colors.tertiary,
+                    color: light
+                        ? const Color(0xFFB7862A)
+                        : const Color(0xFFD7A544),
                   ),
                 ),
               ),
