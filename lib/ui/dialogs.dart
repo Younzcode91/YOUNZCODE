@@ -136,6 +136,7 @@ class _ModelDialogState extends State<_ModelDialog> {
       backgroundColor: colors.surface,
       shape: RoundedRectangleBorder(
         side: BorderSide(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(
@@ -376,7 +377,9 @@ class _ModelDialogState extends State<_ModelDialog> {
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      shape: const RoundedRectangleBorder(),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       side: BorderSide(color: theme.dividerColor),
                     ),
                     child: const Text('CANCEL'),
@@ -464,11 +467,13 @@ class _PermissionDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     final command = title.toLowerCase().contains('perintah');
     return Dialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        side: BorderSide(color: Color(0xFF444938)),
+      backgroundColor: cs.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: cs.outline),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: SizedBox(
         width: 620,
@@ -483,11 +488,14 @@ class _PermissionDialog extends StatelessWidget {
                   Container(
                     width: 48,
                     height: 48,
-                    color: const Color(0xFFC6F269),
-                    child: const Icon(
-                      Icons.shield,
-                      color: Color(0xFF253500),
-                      size: 30,
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.shield_outlined,
+                      color: cs.primary,
+                      size: 28,
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -507,7 +515,7 @@ class _PermissionDialog extends StatelessWidget {
                           command
                               ? 'The AI is requesting permission to run this command.'
                               : 'The AI is requesting permission to apply this change.',
-                          style: const TextStyle(color: Color(0xFFC4C9B2)),
+                          style: TextStyle(color: cs.onSurfaceVariant),
                         ),
                       ],
                     ),
@@ -521,26 +529,27 @@ class _PermissionDialog extends StatelessWidget {
               constraints: const BoxConstraints(maxHeight: 260),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D0F07),
-                border: Border.all(color: const Color(0xFF444938)),
+                color: cs.onSurface.withValues(alpha: 0.04),
+                border: Border.all(color: cs.outline),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: SingleChildScrollView(
                 child: SelectableText(
                   detail,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Consolas',
                     fontSize: 12,
                     height: 1.5,
-                    color: Color(0xFFE2E4D5),
+                    color: cs.onSurface,
                   ),
                 ),
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              decoration: const BoxDecoration(
-                color: Color(0xFF1A1D14),
-                border: Border(top: BorderSide(color: Color(0xFF444938))),
+              decoration: BoxDecoration(
+                color: cs.onSurface.withValues(alpha: 0.03),
+                border: Border(top: BorderSide(color: cs.outline)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
@@ -549,8 +558,10 @@ class _PermissionDialog extends StatelessWidget {
                     onPressed: () =>
                         Navigator.pop(context, PermissionDecision.reject),
                     style: OutlinedButton.styleFrom(
-                      shape: const RoundedRectangleBorder(),
-                      side: const BorderSide(color: Color(0xFF444938)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      side: BorderSide(color: cs.outline),
                     ),
                     child: const Text('REJECT'),
                   ),
@@ -587,10 +598,14 @@ class _TerminalPermissionDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final light = Theme.of(context).brightness == Brightness.light;
+    final warning = light ? const Color(0xFFB7862A) : const Color(0xFFD7A544);
     return Dialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        side: BorderSide(color: Color(0xFF252A32)),
+      backgroundColor: cs.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: cs.outline),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: SizedBox(
         width: 480,
@@ -604,27 +619,23 @@ class _TerminalPermissionDialog extends StatelessWidget {
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: const BoxDecoration(
-                      color: Color(0x1AFFB000),
+                    decoration: BoxDecoration(
+                      color: warning.withValues(alpha: 0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.shield,
-                      color: Color(0xFFFFB000),
-                      size: 30,
-                    ),
+                    child: Icon(Icons.shield, color: warning, size: 30),
                   ),
                   const SizedBox(height: 16),
                   const Text(
                     'ALLOW TERMINAL COMMAND?',
                     textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'The AI agent is requesting permission to execute this command in the project workspace.',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: Color(0xFFC4C9B2), height: 1.45),
+                    style: TextStyle(color: cs.onSurfaceVariant, height: 1.45),
                   ),
                 ],
               ),
@@ -634,25 +645,22 @@ class _TerminalPermissionDialog extends StatelessWidget {
               margin: const EdgeInsets.symmetric(horizontal: 32),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF0D0F07),
-                border: Border.all(color: const Color(0xFF444938)),
+                color: cs.onSurface.withValues(alpha: 0.04),
+                border: Border.all(color: cs.outline),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.terminal,
-                    size: 19,
-                    color: Color(0xFF8E937F),
-                  ),
+                  Icon(Icons.terminal, size: 19, color: cs.onSurfaceVariant),
                   const SizedBox(width: 12),
                   Expanded(
                     child: SelectableText(
                       detail,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Consolas',
                         fontSize: 13,
-                        color: Color(0xFFC6F269),
+                        color: cs.primary,
                       ),
                     ),
                   ),
@@ -663,20 +671,20 @@ class _TerminalPermissionDialog extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(32, 8, 32, 24),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.info_outline,
                     size: 13,
-                    color: Color(0xFF8E937F),
+                    color: cs.onSurfaceVariant,
                   ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: Text(
                       'Working Directory: $workspace',
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontFamily: 'Consolas',
                         fontSize: 10,
-                        color: Color(0xFF8E937F),
+                        color: cs.onSurfaceVariant,
                       ),
                     ),
                   ),
@@ -694,7 +702,7 @@ class _TerminalPermissionDialog extends StatelessWidget {
                       child: const Text('REJECT'),
                     ),
                   ),
-                  const VerticalDivider(width: 1, color: Color(0xFF252A32)),
+                  VerticalDivider(width: 1, color: cs.outline),
                   Expanded(
                     child: TextButton(
                       onPressed: () => Navigator.pop(
@@ -704,7 +712,7 @@ class _TerminalPermissionDialog extends StatelessWidget {
                       child: const Text('ALLOW ALWAYS'),
                     ),
                   ),
-                  const VerticalDivider(width: 1, color: Color(0xFF252A32)),
+                  VerticalDivider(width: 1, color: cs.outline),
                   Expanded(
                     child: FilledButton.icon(
                       onPressed: () =>
@@ -733,10 +741,12 @@ class _ConnectionErrorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Dialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        side: BorderSide(color: Color(0xFF444938)),
+      backgroundColor: cs.surface,
+      shape: RoundedRectangleBorder(
+        side: BorderSide(color: cs.outline),
+        borderRadius: BorderRadius.circular(14),
       ),
       child: SizedBox(
         width: 460,
@@ -746,16 +756,16 @@ class _ConnectionErrorDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Row(
+              Row(
                 children: [
-                  Icon(Icons.error_outline, color: Color(0xFFFF7B72), size: 34),
-                  SizedBox(width: 14),
+                  Icon(Icons.error_outline, color: cs.error, size: 34),
+                  const SizedBox(width: 14),
                   Text(
                     'CONNECTION FAILED',
                     style: TextStyle(
-                      color: Color(0xFFFF7B72),
+                      color: cs.error,
                       fontSize: 22,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -770,31 +780,32 @@ class _ConnectionErrorDialog extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0D0F07),
-                  border: Border.all(color: const Color(0xFF444938)),
+                  color: cs.onSurface.withValues(alpha: 0.04),
+                  border: Border.all(color: cs.outline),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: SelectableText(
                   detail,
                   maxLines: 5,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Consolas',
                     fontSize: 11,
-                    color: Color(0xFFC4C9B2),
+                    color: cs.onSurfaceVariant,
                   ),
                 ),
               ),
               const SizedBox(height: 18),
-              const Text(
+              Text(
                 'TROUBLESHOOTING',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.8,
-                  color: Color(0xFF8E937F),
+                  color: cs.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 '1. Check your internet connection\n'
                 '2. Verify the API key in Model Settings\n'
                 '3. Ensure the Base URL and model are valid',
@@ -802,7 +813,7 @@ class _ConnectionErrorDialog extends StatelessWidget {
                   fontFamily: 'Consolas',
                   fontSize: 12,
                   height: 1.65,
-                  color: Color(0xFFC4C9B2),
+                  color: cs.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 22),
@@ -985,7 +996,7 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
                 children: [
                   const Text(
                     'PROJECT SETTINGS',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -1031,8 +1042,10 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
                           ),
                           child: InkWell(
                             onTap: () => setState(() => _tab = index),
-                            highlightColor: const Color(0x3379D6CD),
-                            splashColor: const Color(0x4479D6CD),
+                            highlightColor: colors.primary.withValues(
+                              alpha: 0.10,
+                            ),
+                            splashColor: colors.primary.withValues(alpha: 0.16),
                             child: Center(
                               child: Text(
                                 tabs[index],
@@ -1132,88 +1145,95 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
     ],
   );
 
-  Widget _environmentTab() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('ENVIRONMENT VARIABLES', style: _SettingsHeading.style),
-      const SizedBox(height: 8),
-      const Text(
-        'Variables are kept in memory for this session and are never written to disk.',
-        style: TextStyle(fontSize: 11, color: Color(0xFF8E937F)),
-      ),
-      const SizedBox(height: 16),
-      for (final entry in _environment.entries)
-        Container(
-          margin: const EdgeInsets.only(bottom: 4),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          color: const Color(0xFF1A1D14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  entry.key,
-                  style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  '•' * entry.value.length.clamp(4, 18),
-                  style: const TextStyle(
-                    fontFamily: 'Consolas',
-                    color: Color(0xFF8E937F),
+  Widget _environmentTab() {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('ENVIRONMENT VARIABLES', style: _SettingsHeading.style),
+        const SizedBox(height: 8),
+        Text(
+          'Variables are kept in memory for this session and are never written to disk.',
+          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        for (final entry in _environment.entries)
+          Container(
+            margin: const EdgeInsets.only(bottom: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.onSurface.withValues(alpha: 0.04),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    entry.key,
+                    style: const TextStyle(
+                      fontFamily: 'Consolas',
+                      fontSize: 12,
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                onPressed: () => setState(() => _environment.remove(entry.key)),
-                icon: const Icon(
-                  Icons.delete_outline,
-                  size: 17,
-                  color: Color(0xFFFF7B72),
+                Expanded(
+                  child: Text(
+                    '•' * entry.value.length.clamp(4, 18),
+                    style: TextStyle(
+                      fontFamily: 'Consolas',
+                      color: cs.onSurfaceVariant,
+                    ),
+                  ),
                 ),
+                IconButton(
+                  onPressed: () =>
+                      setState(() => _environment.remove(entry.key)),
+                  icon: Icon(Icons.delete_outline, size: 17, color: cs.error),
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _keyController,
+                decoration: const InputDecoration(hintText: 'KEY'),
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _valueController,
+                decoration: const InputDecoration(hintText: 'VALUE'),
+                obscureText: true,
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+              ),
+            ),
+            const SizedBox(width: 8),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _keyController,
+              builder: (context, value, _) => FilledButton(
+                onPressed: value.text.trim().isEmpty
+                    ? null
+                    : () {
+                        setState(() {
+                          _environment[value.text.trim()] =
+                              _valueController.text;
+                          _keyController.clear();
+                          _valueController.clear();
+                        });
+                      },
+                child: const Text('ADD'),
+              ),
+            ),
+          ],
         ),
-      const SizedBox(height: 14),
-      Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _keyController,
-              decoration: const InputDecoration(hintText: 'KEY'),
-              style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _valueController,
-              decoration: const InputDecoration(hintText: 'VALUE'),
-              obscureText: true,
-              style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-            ),
-          ),
-          const SizedBox(width: 8),
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _keyController,
-            builder: (context, value, _) => FilledButton(
-              onPressed: value.text.trim().isEmpty
-                  ? null
-                  : () {
-                      setState(() {
-                        _environment[value.text.trim()] = _valueController.text;
-                        _keyController.clear();
-                        _valueController.clear();
-                      });
-                    },
-              child: const Text('ADD'),
-            ),
-          ),
-        ],
-      ),
-    ],
-  );
+      ],
+    );
+  }
 
   Widget _permissionsTab() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1290,163 +1310,168 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
     ],
   );
 
-  Widget _apiTab() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('API CONFIGURATION', style: _SettingsHeading.style),
-      const SizedBox(height: 8),
-      const Text(
-        'Configure the OpenAI-compatible connection used by the agent.',
-        style: TextStyle(fontSize: 11, color: Color(0xFF8E937F)),
-      ),
-      const SizedBox(height: 16),
-      const _FieldLabel('BASE URL'),
-      TextField(
-        controller: _apiBaseController,
-        style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-      ),
-      const SizedBox(height: 12),
-      const _FieldLabel('MODEL'),
-      TextField(
-        controller: _apiModelController,
-        style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-      ),
-      const SizedBox(height: 12),
-      const _FieldLabel('TOKEN VALUE'),
-      TextField(
-        controller: _apiKeyController,
-        obscureText: true,
-        style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-      ),
-      const SizedBox(height: 12),
-      const _FieldLabel('MODEL & COMMAND INACTIVITY TIMEOUT (MS)'),
-      TextField(
-        controller: _timeoutController,
-        keyboardType: TextInputType.number,
-        decoration: const InputDecoration(
-          helperText:
-              'Default 120000 (2 minutes). Increase for slow models, builds, '
-              'or tests. Each task also stops after 10 minutes total.',
+  Widget _apiTab() {
+    final cs = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('API CONFIGURATION', style: _SettingsHeading.style),
+        const SizedBox(height: 8),
+        Text(
+          'Configure the OpenAI-compatible connection used by the agent.',
+          style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant),
         ),
-        style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
-      ),
-      const SizedBox(height: 18),
-      const Text('GLOBAL HEADERS', style: _SettingsHeading.style),
-      const SizedBox(height: 8),
-      for (final entry in _headers.entries)
-        ListTile(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            entry.key,
-            style: const TextStyle(
-              fontFamily: 'Consolas',
-              fontSize: 11,
-              color: Color(0xFF79D6CD),
+        const SizedBox(height: 16),
+        const _FieldLabel('BASE URL'),
+        TextField(
+          controller: _apiBaseController,
+          style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        const _FieldLabel('MODEL'),
+        TextField(
+          controller: _apiModelController,
+          style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        const _FieldLabel('TOKEN VALUE'),
+        TextField(
+          controller: _apiKeyController,
+          obscureText: true,
+          style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+        ),
+        const SizedBox(height: 12),
+        const _FieldLabel('MODEL & COMMAND INACTIVITY TIMEOUT (MS)'),
+        TextField(
+          controller: _timeoutController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            helperText:
+                'Default 120000 (2 minutes). Increase for slow models, builds, '
+                'or tests. Each task also stops after 10 minutes total.',
+          ),
+          style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+        ),
+        const SizedBox(height: 18),
+        const Text('GLOBAL HEADERS', style: _SettingsHeading.style),
+        const SizedBox(height: 8),
+        for (final entry in _headers.entries)
+          ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              entry.key,
+              style: TextStyle(
+                fontFamily: 'Consolas',
+                fontSize: 11,
+                color: cs.primary,
+              ),
             ),
-          ),
-          subtitle: Text(
-            entry.value,
-            style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
-          ),
-          trailing: IconButton(
-            onPressed: () => setState(() => _headers.remove(entry.key)),
-            icon: const Icon(Icons.delete_outline, color: Color(0xFFFF7B72)),
-          ),
-        ),
-      Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _headerKeyController,
-              decoration: const InputDecoration(hintText: 'HEADER KEY'),
+            subtitle: Text(
+              entry.value,
               style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _headerValueController,
-              decoration: const InputDecoration(hintText: 'VALUE'),
-              style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+            trailing: IconButton(
+              onPressed: () => setState(() => _headers.remove(entry.key)),
+              icon: Icon(Icons.delete_outline, color: cs.error),
             ),
           ),
-          ValueListenableBuilder<TextEditingValue>(
-            valueListenable: _headerKeyController,
-            builder: (context, value, _) => IconButton(
-              onPressed: value.text.trim().isEmpty
-                  ? null
-                  : () {
-                      setState(() {
-                        _headers[value.text.trim()] =
-                            _headerValueController.text;
-                        _headerKeyController.clear();
-                        _headerValueController.clear();
-                      });
-                    },
-              icon: const Icon(Icons.add_circle),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _headerKeyController,
+                decoration: const InputDecoration(hintText: 'HEADER KEY'),
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: _headerValueController,
+                decoration: const InputDecoration(hintText: 'VALUE'),
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 11),
+              ),
+            ),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _headerKeyController,
+              builder: (context, value, _) => IconButton(
+                onPressed: value.text.trim().isEmpty
+                    ? null
+                    : () {
+                        setState(() {
+                          _headers[value.text.trim()] =
+                              _headerValueController.text;
+                          _headerKeyController.clear();
+                          _headerValueController.clear();
+                        });
+                      },
+                icon: const Icon(Icons.add_circle),
+              ),
+            ),
+          ],
+        ),
+        if (_connectionStatus != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Text(
+              _connectionStatus!,
+              style: TextStyle(
+                fontFamily: 'Consolas',
+                fontSize: 10,
+                color: _connectionStatus!.startsWith('CONNECTION')
+                    ? (Theme.of(context).brightness == Brightness.light
+                          ? const Color(0xFF2F9E69)
+                          : const Color(0xFF57C08A))
+                    : cs.error,
+              ),
             ),
           ),
-        ],
-      ),
-      if (_connectionStatus != null)
-        Padding(
-          padding: const EdgeInsets.only(top: 10),
-          child: Text(
-            _connectionStatus!,
-            style: TextStyle(
-              fontFamily: 'Consolas',
-              fontSize: 10,
-              color: _connectionStatus!.startsWith('CONNECTION')
-                  ? const Color(0xFFC6F269)
-                  : const Color(0xFFFF7B72),
-            ),
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: _testingConnection ? null : _testConnection,
+          icon: const Icon(Icons.network_check),
+          label: Text(_testingConnection ? 'TESTING...' : 'TEST CONNECTION'),
+        ),
+        const SizedBox(height: 24),
+        const Text('AVAILABLE TOOLS', style: _SettingsHeading.style),
+        const SizedBox(height: 12),
+        if (_allowWrite)
+          const _ApiTool(
+            name: 'list_files',
+            method: 'TOOL',
+            description: 'List files matching a workspace glob.',
           ),
-        ),
-      const SizedBox(height: 14),
-      OutlinedButton.icon(
-        onPressed: _testingConnection ? null : _testConnection,
-        icon: const Icon(Icons.network_check),
-        label: Text(_testingConnection ? 'TESTING...' : 'TEST CONNECTION'),
-      ),
-      const SizedBox(height: 24),
-      const Text('AVAILABLE TOOLS', style: _SettingsHeading.style),
-      const SizedBox(height: 12),
-      if (_allowWrite)
+        if (_allowWrite)
+          const _ApiTool(
+            name: 'read_file',
+            method: 'TOOL',
+            description: 'Read a text file inside the workspace.',
+          ),
+        if (_allowTerminal)
+          const _ApiTool(
+            name: 'search_text',
+            method: 'TOOL',
+            description: 'Search a regex using ripgrep.',
+          ),
         const _ApiTool(
-          name: 'list_files',
+          name: 'write_file',
           method: 'TOOL',
-          description: 'List files matching a workspace glob.',
+          description: 'Create or overwrite a file after permission.',
         ),
-      if (_allowWrite)
         const _ApiTool(
-          name: 'read_file',
+          name: 'replace_text',
           method: 'TOOL',
-          description: 'Read a text file inside the workspace.',
+          description: 'Replace one unique text occurrence after permission.',
         ),
-      if (_allowTerminal)
         const _ApiTool(
-          name: 'search_text',
+          name: 'run_command',
           method: 'TOOL',
-          description: 'Search a regex using ripgrep.',
+          description: 'Run PowerShell after permission.',
         ),
-      const _ApiTool(
-        name: 'write_file',
-        method: 'TOOL',
-        description: 'Create or overwrite a file after permission.',
-      ),
-      const _ApiTool(
-        name: 'replace_text',
-        method: 'TOOL',
-        description: 'Replace one unique text occurrence after permission.',
-      ),
-      const _ApiTool(
-        name: 'run_command',
-        method: 'TOOL',
-        description: 'Run PowerShell after permission.',
-      ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _SettingsHeading {
@@ -1702,14 +1727,17 @@ class _ApiTool extends StatelessWidget {
           Container(
             width: 44,
             padding: const EdgeInsets.symmetric(vertical: 3),
-            color: colors.primary,
+            decoration: BoxDecoration(
+              color: colors.primary.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(6),
+            ),
             alignment: Alignment.center,
             child: Text(
               method,
-              style: const TextStyle(
+              style: TextStyle(
                 fontFamily: 'Consolas',
                 fontSize: 9,
-                color: Color(0xFF253500),
+                color: colors.primary,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -1760,8 +1788,11 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final light = Theme.of(context).brightness == Brightness.light;
+    final warning = light ? const Color(0xFFB7862A) : const Color(0xFFD7A544);
     return Dialog(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: cs.surface,
       child: SizedBox(
         width: 760,
         height: 620,
@@ -1771,17 +1802,14 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
               padding: const EdgeInsets.all(18),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.extension_outlined,
-                    color: Color(0xFFC6F269),
-                  ),
+                  Icon(Icons.extension_outlined, color: cs.primary),
                   const SizedBox(width: 10),
                   const Expanded(
                     child: Text(
                       'ADD-ON MANAGER',
                       style: TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -1806,19 +1834,19 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
               ),
             ),
             const Divider(height: 1),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(18, 12, 18, 8),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
               child: Text(
                 'Supported: YOUNZCODE plugins, OpenCode/Claude SKILL.md, MCP JSON, and VSIX. Imported code is never executed during installation.',
-                style: TextStyle(fontSize: 10, color: Color(0xFF8E937F)),
+                style: TextStyle(fontSize: 10, color: cs.onSurfaceVariant),
               ),
             ),
             Expanded(
               child: _addons.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
                         'No add-ons installed',
-                        style: TextStyle(color: Color(0xFF8E937F)),
+                        style: TextStyle(color: cs.onSurfaceVariant),
                       ),
                     )
                   : ListView.separated(
@@ -1831,16 +1859,13 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
                           key: ValueKey('addon-${addon.id}'),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF171A12),
-                            border: Border.all(color: const Color(0xFF34392D)),
+                            color: cs.onSurface.withValues(alpha: 0.04),
+                            border: Border.all(color: cs.outline),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Row(
                             children: [
-                              Icon(
-                                _addonIcon(addon.kind),
-                                color: const Color(0xFF79D6CD),
-                              ),
+                              Icon(_addonIcon(addon.kind), color: cs.primary),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
@@ -1857,18 +1882,18 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
                                       addon.description,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
-                                        color: Color(0xFFA5AA98),
+                                        color: cs.onSurfaceVariant,
                                       ),
                                     ),
                                     const SizedBox(height: 5),
                                     Text(
                                       _addonStatus(addon),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontFamily: 'Consolas',
                                         fontSize: 9,
-                                        color: Color(0xFFFFC857),
+                                        color: warning,
                                       ),
                                     ),
                                   ],
@@ -1957,6 +1982,7 @@ class _ChatHistoryDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return AlertDialog(
       title: const Row(
         children: [
@@ -1969,10 +1995,10 @@ class _ChatHistoryDialog extends StatelessWidget {
         width: 560,
         height: 420,
         child: sessions.isEmpty
-            ? const Center(
+            ? Center(
                 child: Text(
                   'Belum ada percakapan tersimpan di workspace ini.',
-                  style: TextStyle(color: Color(0xFF8E937F)),
+                  style: TextStyle(color: cs.onSurfaceVariant),
                 ),
               )
             : ListView.separated(
@@ -1986,9 +2012,7 @@ class _ChatHistoryDialog extends StatelessWidget {
                     selected: active,
                     leading: Icon(
                       active ? Icons.chat_bubble : Icons.chat_bubble_outline,
-                      color: active
-                          ? const Color(0xFFC6F269)
-                          : const Color(0xFF79D6CD),
+                      color: active ? cs.primary : cs.onSurfaceVariant,
                     ),
                     title: Text(
                       session.title,
@@ -2047,11 +2071,12 @@ class _SearchView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Column(
       children: [
         Container(
           padding: const EdgeInsets.all(24),
-          color: const Color(0xFF0D0F07),
+          color: cs.onSurface.withValues(alpha: 0.04),
           child: Column(
             children: [
               Row(
@@ -2102,10 +2127,10 @@ class _SearchView extends StatelessWidget {
                     controller.text.isEmpty
                         ? 'ENTER A QUERY TO SEARCH THE WORKSPACE'
                         : 'NO MATCHES FOUND',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontFamily: 'Consolas',
                       fontSize: 11,
-                      color: Color(0xFF8E937F),
+                      color: cs.onSurfaceVariant,
                     ),
                   ),
                 )
@@ -2136,13 +2161,10 @@ class _SearchView extends StatelessWidget {
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1A1D14),
+                        decoration: BoxDecoration(
+                          color: cs.onSurface.withValues(alpha: 0.04),
                           border: Border(
-                            left: BorderSide(
-                              color: Color(0xFF79D6CD),
-                              width: 2,
-                            ),
+                            left: BorderSide(color: cs.primary, width: 2),
                           ),
                         ),
                         child: Row(
@@ -2152,10 +2174,10 @@ class _SearchView extends StatelessWidget {
                               child: Text(
                                 path,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontFamily: 'Consolas',
                                   fontSize: 10,
-                                  color: Color(0xFF79D6CD),
+                                  color: cs.primary,
                                 ),
                               ),
                             ),
@@ -2164,10 +2186,10 @@ class _SearchView extends StatelessWidget {
                               child: Text(
                                 number,
                                 textAlign: TextAlign.right,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontFamily: 'Consolas',
                                   fontSize: 10,
-                                  color: Color(0xFF8E937F),
+                                  color: cs.onSurfaceVariant,
                                 ),
                               ),
                             ),

@@ -273,16 +273,18 @@ class SyntaxEditingController extends TextEditingController {
       final value = match.group(0)!;
       Color? color;
       FontWeight? weight;
+      // Cool syntax palette that harmonises with the blue UI: muted-slate
+      // comments, green strings, amber numbers, blue keywords.
       if (value.startsWith('//') ||
           value.startsWith('/*') ||
           (language.id == 'Python' && value.startsWith('#'))) {
-        color = light ? const Color(0xFF5D6853) : const Color(0xFF758267);
+        color = light ? const Color(0xFF6B7280) : const Color(0xFF6B7688);
       } else if (value.startsWith('"') || value.startsWith("'")) {
-        color = light ? const Color(0xFF895B00) : const Color(0xFFE6B673);
+        color = light ? const Color(0xFF357935) : const Color(0xFF9ACE7A);
       } else if (RegExp(r'^\d').hasMatch(value)) {
-        color = light ? const Color(0xFF4E6815) : const Color(0xFFB7D986);
+        color = light ? const Color(0xFF8A5A00) : const Color(0xFFE0A860);
       } else if (language.keywords.contains(value)) {
-        color = light ? const Color(0xFF006A62) : const Color(0xFF79D6CD);
+        color = light ? const Color(0xFF2F6FE0) : const Color(0xFF82AAFF);
         weight = FontWeight.w600;
       }
       spans.add(

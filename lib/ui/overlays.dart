@@ -109,7 +109,10 @@ class _NotificationDialogState extends State<_NotificationDialog> {
                                 : Icons.check_circle_outline,
                             color: item.error
                                 ? Theme.of(context).colorScheme.error
-                                : const Color(0xFF28C76F),
+                                : (Theme.of(context).brightness ==
+                                          Brightness.light
+                                      ? const Color(0xFF2F9E69)
+                                      : const Color(0xFF57C08A)),
                           ),
                           title: Text(item.title),
                           subtitle: Text(

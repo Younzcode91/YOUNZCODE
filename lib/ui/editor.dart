@@ -335,11 +335,11 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
     final light = theme.brightness == Brightness.light;
     final editorBackground = light
         ? const Color(0xFFFFFFFF)
-        : const Color(0xFF0C0E12);
-    final editorChrome = light ? colors.surface : const Color(0xFF151810);
+        : const Color(0xFF0D1117);
+    final editorChrome = light ? colors.surface : const Color(0xFF10151D);
     final editorGutter = light
-        ? const Color(0xFFF2F4EC)
-        : const Color(0xFF10120F);
+        ? const Color(0xFFF1F4F8)
+        : const Color(0xFF0F141C);
     final lines = '\n'.allMatches(document.controller.text).length + 1;
     final points = _breakpoints[document.path] ?? <int>{};
     return CallbackShortcuts(
@@ -405,9 +405,9 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                                 padding: const EdgeInsets.only(left: 12),
                                 decoration: BoxDecoration(
                                   border: item.path == widget.activePath
-                                      ? const Border(
+                                      ? Border(
                                           top: BorderSide(
-                                            color: Color(0xFFC6F269),
+                                            color: colors.primary,
                                             width: 2,
                                           ),
                                         )
@@ -421,7 +421,9 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                                           : Icons.insert_drive_file_outlined,
                                       size: 14,
                                       color: item.sensitive
-                                          ? const Color(0xFFB26A00)
+                                          ? (light
+                                                ? const Color(0xFFB7862A)
+                                                : const Color(0xFFD7A544))
                                           : colors.secondary,
                                     ),
                                     const SizedBox(width: 7),
@@ -474,8 +476,8 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                     ),
                   ),
                   if (document.sensitive)
-                    const Padding(
-                      padding: EdgeInsets.only(right: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
                       child: Tooltip(
                         message: 'File sensitif lokal; agent AI tetap diblokir',
                         child: Row(
@@ -484,15 +486,19 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                             Icon(
                               Icons.shield_outlined,
                               size: 14,
-                              color: Color(0xFFFFC857),
+                              color: light
+                                  ? const Color(0xFFB7862A)
+                                  : const Color(0xFFD7A544),
                             ),
-                            SizedBox(width: 5),
+                            const SizedBox(width: 5),
                             Text(
                               'LOCAL ONLY',
                               style: TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFFFFC857),
+                                color: light
+                                    ? const Color(0xFFB7862A)
+                                    : const Color(0xFFD7A544),
                               ),
                             ),
                           ],
@@ -537,8 +543,8 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                           : Icons.stop,
                       size: 18,
                       color: (!_debugAdapter.running && _debugProcess == null)
-                          ? const Color(0xFFC6F269)
-                          : const Color(0xFFFF6B6B),
+                          ? colors.primary
+                          : colors.error,
                     ),
                   ),
                 ],
@@ -570,16 +576,16 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                                       SizedBox(
                                         width: 20,
                                         child: _stoppedLine == line
-                                            ? const Icon(
+                                            ? Icon(
                                                 Icons.arrow_right,
                                                 size: 18,
-                                                color: Color(0xFFC6F269),
+                                                color: colors.primary,
                                               )
                                             : points.contains(line)
-                                            ? const Icon(
+                                            ? Icon(
                                                 Icons.circle,
                                                 size: 10,
-                                                color: Color(0xFFFF6B6B),
+                                                color: colors.error,
                                               )
                                             : null,
                                       ),
@@ -680,7 +686,10 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                               bottom: 8,
                               child: Container(
                                 padding: const EdgeInsets.all(8),
-                                color: const Color(0xEE241A18),
+                                decoration: BoxDecoration(
+                                  color: colors.errorContainer,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
                                 child: Text(
                                   _diagnostics
                                       .take(3)
@@ -691,10 +700,10 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                                       .join('\n'),
                                   maxLines: 4,
                                   overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontFamily: 'Consolas',
                                     fontSize: 10,
-                                    color: Color(0xFFFFB4AB),
+                                    color: colors.onErrorContainer,
                                   ),
                                 ),
                               ),
