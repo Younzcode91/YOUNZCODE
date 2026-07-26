@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kode_agent_desktop/services/secret_scanner.dart';
 import 'package:kode_agent_desktop/services/update_service.dart';
@@ -39,6 +42,62 @@ void main() {
     );
     await expectLater(
       const UpdateService().downloadAndVerify(update, 'ignored'),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test(
+    'tanda tangan Ed25519 diterima jika valid, ditolak jika dirusak',
+    () async {
+      final algorithm = Ed25519();
+      final keyPair = await algorithm.newKeyPair();
+      final publicKey = await keyPair.extractPublicKey();
+      final pubB64 = base64Encode(publicKey.bytes);
+
+      const base = AppUpdate(
+        version: '2.0.0',
+        channel: 'stable',
+        notes: '',
+        downloadUrl: 'https://dl.younz.test/app.exe',
+        sha256:
+            'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      );
+      final signature = await algorithm.sign(
+        utf8.encode(UpdateService.canonicalUpdatePayload(base)),
+        keyPair: keyPair,
+      );
+      final signed = AppUpdate(
+        version: base.version,
+        channel: base.channel,
+        notes: base.notes,
+        downloadUrl: base.downloadUrl,
+        sha256: base.sha256,
+        signature: base64Encode(signature.bytes),
+      );
+
+      expect(await UpdateService.verifySignature(signed, pubB64), isTrue);
+      // No signature at all → rejected.
+      expect(await UpdateService.verifySignature(base, pubB64), isFalse);
+      // Tampered download URL under the same signature → rejected.
+      final tampered = AppUpdate(
+        version: base.version,
+        channel: base.channel,
+        notes: base.notes,
+        downloadUrl: 'https://evil.test/app.exe',
+        sha256: base.sha256,
+        signature: signed.signature,
+      );
+      expect(await UpdateService.verifySignature(tampered, pubB64), isFalse);
+    },
+  );
+
+  test('host pinning menolak host di luar allowlist', () async {
+    await expectLater(
+      const UpdateService(allowedHosts: ['releases.younz.test']).check(
+        manifestUrl: 'https://cdn.evil.test/manifest.json',
+        channel: 'stable',
+        currentVersion: '1.0.0',
+      ),
       throwsA(isA<FormatException>()),
     );
   });

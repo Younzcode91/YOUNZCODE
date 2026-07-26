@@ -207,13 +207,13 @@ class McpClient {
             ...config.headers,
             'Content-Type': 'application/json',
             'Accept': 'application/json, text/event-stream',
-            if (_sessionId != null) 'Mcp-Session-Id': _sessionId!,
+            'Mcp-Session-Id': ?_sessionId,
           },
           body: jsonEncode({
             'jsonrpc': '2.0',
             if (!isNotification) 'id': id,
             'method': method,
-            if (params != null) 'params': params,
+            'params': ?params,
           }),
         )
         .timeout(const Duration(seconds: 30));
