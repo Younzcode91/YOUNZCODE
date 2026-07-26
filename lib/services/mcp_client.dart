@@ -70,7 +70,7 @@ class McpClient {
     await _request('initialize', {
       'protocolVersion': '2025-03-26',
       'capabilities': {},
-      'clientInfo': {'name': 'YOUNZCODE', 'version': '1.0.1'},
+      'clientInfo': {'name': 'YOUNZCODE', 'version': '1.1.0'},
     });
     _notify('notifications/initialized');
     await refreshTools();
@@ -93,7 +93,7 @@ class McpClient {
     await _request('initialize', {
       'protocolVersion': '2025-03-26',
       'capabilities': {},
-      'clientInfo': {'name': 'YOUNZCODE', 'version': '1.0.1'},
+      'clientInfo': {'name': 'YOUNZCODE', 'version': '1.1.0'},
     });
     _notify('notifications/initialized');
     await refreshTools();

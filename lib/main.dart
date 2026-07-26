@@ -41,7 +41,7 @@ part 'ui/overlays.dart';
 const _fastMotion = Duration(milliseconds: 140);
 const _mediumMotion = Duration(milliseconds: 240);
 const _motionCurve = Curves.easeOutCubic;
-const _appVersion = '1.0.1';
+const _appVersion = '1.1.0';
 
 enum _AgentTurnState {
   idle,
