@@ -1048,9 +1048,11 @@ class _ComposerState extends State<_Composer> {
                 maxHeight: MediaQuery.sizeOf(context).height >= 700 ? 440 : 280,
               ),
               margin: const EdgeInsets.only(bottom: 6),
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: colors.surface,
                 border: Border.all(color: theme.dividerColor),
+                borderRadius: BorderRadius.circular(10),
               ),
               child: SingleChildScrollView(
                 child: LayoutBuilder(
