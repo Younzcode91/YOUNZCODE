@@ -19,9 +19,10 @@ class PersistentTerminalService {
     required Map<String, String> environment,
   }) async {
     if (_process != null) return;
+    final shell = _resolveShell();
     final process = await Process.start(
-      'powershell.exe',
-      ['-NoLogo', '-NoProfile', '-NoExit', '-Command', '-'],
+      shell.executable,
+      shell.arguments,
       workingDirectory: workspace,
       environment: environment,
     );
@@ -45,19 +46,46 @@ class PersistentTerminalService {
     final pending = Completer<int>();
     _marker = marker;
     _pending = pending;
-    process.stdin.writeln(r'$global:LASTEXITCODE = $null');
-    process.stdin.writeln(command);
-    process.stdin.writeln(r'$__younzSucceeded = $?');
-    process.stdin.writeln(r'$__younzNativeExitCode = $LASTEXITCODE');
-    process.stdin.writeln(
-      "Write-Output ('$marker' + \$(if (\$__younzSucceeded) { "
-      '0 } else { '
-      'if (\$null -ne \$__younzNativeExitCode -and '
-      '\$__younzNativeExitCode -ne 0) { \$__younzNativeExitCode } '
-      'else { 1 } }))',
-    );
+    if (Platform.isWindows) {
+      process.stdin.writeln(r'$global:LASTEXITCODE = $null');
+      process.stdin.writeln(command);
+      process.stdin.writeln(r'$__younzSucceeded = $?');
+      process.stdin.writeln(r'$__younzNativeExitCode = $LASTEXITCODE');
+      process.stdin.writeln(
+        "Write-Output ('$marker' + \$(if (\$__younzSucceeded) { "
+        '0 } else { '
+        'if (\$null -ne \$__younzNativeExitCode -and '
+        '\$__younzNativeExitCode -ne 0) { \$__younzNativeExitCode } '
+        'else { 1 } }))',
+      );
+    } else {
+      // POSIX shells expose the just-run command's status directly as $?,
+      // which printf reads before it runs, so the marker carries that code.
+      process.stdin.writeln(command);
+      process.stdin.writeln('printf \'%s%s\\n\' "$marker" "\$?"');
+    }
     await process.stdin.flush();
     return pending.future;
+  }
+
+  // The persistent REPL is PowerShell on Windows and bash (falling back to sh)
+  // elsewhere; both stream stdin commands and echo an exit-code marker.
+  static _ShellSpec _resolveShell() {
+    if (Platform.isWindows) {
+      return const _ShellSpec('powershell.exe', [
+        '-NoLogo',
+        '-NoProfile',
+        '-NoExit',
+        '-Command',
+        '-',
+      ]);
+    }
+    for (final candidate in const ['/bin/bash', '/usr/bin/bash']) {
+      if (File(candidate).existsSync()) {
+        return _ShellSpec(candidate, const []);
+      }
+    }
+    return const _ShellSpec('/bin/sh', []);
   }
 
   void _handleExit(Process process, int code) {
@@ -73,7 +101,7 @@ class PersistentTerminalService {
     if (pending != null && !pending.isCompleted) pending.complete(code);
     unawaited(stdout?.cancel());
     unawaited(stderr?.cancel());
-    onOutput('[PowerShell exited with code $code]');
+    onOutput('[Shell exited with code $code]');
   }
 
   void _handleLine(String line) {
@@ -132,4 +160,11 @@ class PersistentTerminalService {
     await stderr?.cancel();
     if (pending != null && !pending.isCompleted) pending.complete(-1);
   }
+}
+
+class _ShellSpec {
+  const _ShellSpec(this.executable, this.arguments);
+
+  final String executable;
+  final List<String> arguments;
 }

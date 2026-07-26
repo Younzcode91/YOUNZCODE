@@ -45,11 +45,33 @@ class AddonService {
   }
 
   static String defaultAddonRoot() {
-    final localAppData = Platform.environment['LOCALAPPDATA'];
-    if (localAppData == null || localAppData.trim().isEmpty) {
-      throw const AddonImportException('LOCALAPPDATA is not available.');
+    final env = Platform.environment;
+    if (Platform.isWindows) {
+      final localAppData = env['LOCALAPPDATA'];
+      if (localAppData == null || localAppData.trim().isEmpty) {
+        throw const AddonImportException('LOCALAPPDATA is not available.');
+      }
+      return p.join(localAppData, 'YOUNZCODE', 'addons');
     }
-    return p.join(localAppData, 'YOUNZCODE', 'addons');
+    final home = env['HOME'];
+    if (home == null || home.trim().isEmpty) {
+      throw const AddonImportException('HOME is not available.');
+    }
+    if (Platform.isMacOS) {
+      return p.join(
+        home,
+        'Library',
+        'Application Support',
+        'YOUNZCODE',
+        'addons',
+      );
+    }
+    // Linux and other POSIX platforms: honour XDG_DATA_HOME when set.
+    final xdgData = env['XDG_DATA_HOME'];
+    final base = (xdgData != null && xdgData.trim().isNotEmpty)
+        ? xdgData
+        : p.join(home, '.local', 'share');
+    return p.join(base, 'YOUNZCODE', 'addons');
   }
 
   Future<List<Addon>> load() async {

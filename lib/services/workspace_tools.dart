@@ -735,9 +735,10 @@ class WorkspaceTools {
       return 'Ditolak oleh pengguna.';
     }
     _cancelRequested = false;
+    final shell = _shellInvocation(command);
     final process = await Process.start(
-      'powershell.exe',
-      ['-NoProfile', '-NonInteractive', '-Command', command],
+      shell.executable,
+      shell.arguments,
       workingDirectory: root,
       environment: environment,
     );
@@ -771,6 +772,26 @@ class WorkspaceTools {
     } finally {
       if (identical(_activeProcess, process)) _activeProcess = null;
     }
+  }
+
+  // Runs a one-shot command through the platform shell: PowerShell on Windows,
+  // otherwise bash (falling back to sh) with `-lc` so the string is parsed the
+  // same way a user's shell would parse it.
+  static ({String executable, List<String> arguments}) _shellInvocation(
+    String command,
+  ) {
+    if (Platform.isWindows) {
+      return (
+        executable: 'powershell.exe',
+        arguments: ['-NoProfile', '-NonInteractive', '-Command', command],
+      );
+    }
+    for (final candidate in const ['/bin/bash', '/usr/bin/bash']) {
+      if (File(candidate).existsSync()) {
+        return (executable: candidate, arguments: ['-lc', command]);
+      }
+    }
+    return (executable: '/bin/sh', arguments: ['-c', command]);
   }
 
   Future<void> _terminateProcessTree(Process process) async {

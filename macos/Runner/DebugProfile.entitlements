@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  YOUNZCODE is a coding agent: it opens arbitrary workspace folders,
+	  launches shells, and spawns MCP servers. The macOS App Sandbox forbids
+	  all of that, so this app ships un-sandboxed (Developer ID + notarization,
+	  distributed outside the Mac App Store), like other developer tools.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<false/>
+	<key>com.apple.security.cs.allow-jit</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+</dict>
+</plist>

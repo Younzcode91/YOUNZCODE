@@ -71,9 +71,10 @@ class DebugAdapterLaunch {
         .where((path) => File(path).existsSync())
         .firstOrNull;
     if (script == null) return null;
+    final nodeBinary = Platform.isWindows ? 'node.exe' : 'node';
     final bundledNode = File(
       '${File(script).parent.parent.parent.path}${Platform.pathSeparator}'
-      'node${Platform.pathSeparator}node.exe',
+      'node${Platform.pathSeparator}$nodeBinary',
     );
     final runtimeExecutable = bundledNode.existsSync()
         ? bundledNode.path
