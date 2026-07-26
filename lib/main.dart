@@ -703,8 +703,8 @@ class _AgentHomePageState extends State<AgentHomePage> {
             (addon) => addon.enabled && addon.kind == AddonKind.mcpServer,
           ))
             for (final server in (addon.metadata as McpMetadata).servers)
-              if (server.transport == McpTransport.stdio)
-                McpClient(server, workspace: _workspace),
+              // Both stdio and Streamable HTTP transports are executable now.
+              McpClient(server, workspace: _workspace),
         ];
 
   void _setPlanMode(bool value) {
@@ -7791,8 +7791,8 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
       (addon.metadata as McpMetadata).servers.any(
             (server) => server.transport == McpTransport.stdio,
           )
-          ? 'MCP STDIO TOOLS ACTIVE · HTTP CONFIGS STORED ONLY'
-          : 'HTTP MCP CONFIGURATION STORED ONLY',
+          ? 'MCP STDIO TOOLS ACTIVE'
+          : 'MCP HTTP TOOLS ACTIVE',
   };
 }
 
