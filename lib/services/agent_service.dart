@@ -8,6 +8,7 @@ import '../models/chat_entry.dart';
 import '../models/workspace_change.dart';
 import 'approval_mode.dart';
 import 'mcp_client.dart';
+import 'provider_adapter.dart';
 import 'settings_store.dart';
 import 'workspace_tools.dart';
 
@@ -557,32 +558,64 @@ class AgentService {
     required bool allowTools,
     String? finalInstruction,
   }) async {
-    final requestBaseUrl = normalizeProviderBaseUrl(baseUrl);
+    final protocol = detectProviderProtocol(baseUrl);
+    final native = protocol != ProviderProtocol.openai;
     final client = _injectedHttpClient ?? http.Client();
     _activeHttpClient = client;
-    final requestBody = <String, Object?>{
-      'model': model,
-      'messages': [
-        ..._messages,
-        if (finalInstruction != null)
-          {'role': 'system', 'content': finalInstruction},
-      ],
-      if (allowTools)
-        'tools': _toolDefinitions ??= await _tools.initializeAndDefinitions(),
-      if (allowTools) 'tool_choice': 'auto',
-      'stream': stream,
-    };
-    final request =
-        http.Request('POST', Uri.parse('$requestBaseUrl/chat/completions'))
-          ..headers.addAll({
-            ...headers,
-            'Authorization': 'Bearer $apiKey',
-            'Content-Type': 'application/json',
-            'Accept': stream
-                ? 'text/event-stream, application/json'
-                : 'application/json',
-          })
-          ..body = jsonEncode(requestBody);
+    final messages = <Map<String, dynamic>>[
+      ..._messages,
+      if (finalInstruction != null)
+        {'role': 'system', 'content': finalInstruction},
+    ];
+    final toolDefs = allowTools
+        ? (_toolDefinitions ??= await _tools.initializeAndDefinitions())
+        : const <Map<String, Object>>[];
+    final http.Request request;
+    if (protocol == ProviderProtocol.anthropic) {
+      final built = buildAnthropicRequest(
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+        model: model,
+        messages: messages,
+        tools: toolDefs,
+        extraHeaders: headers,
+      );
+      request = http.Request('POST', built.url)
+        ..headers.addAll(built.headers)
+        ..body = jsonEncode(built.body);
+    } else if (protocol == ProviderProtocol.gemini) {
+      final built = buildGeminiRequest(
+        baseUrl: baseUrl,
+        apiKey: apiKey,
+        model: model,
+        messages: messages,
+        tools: toolDefs,
+        extraHeaders: headers,
+      );
+      request = http.Request('POST', built.url)
+        ..headers.addAll(built.headers)
+        ..body = jsonEncode(built.body);
+    } else {
+      final requestBaseUrl = normalizeProviderBaseUrl(baseUrl);
+      final requestBody = <String, Object?>{
+        'model': model,
+        'messages': messages,
+        if (allowTools) 'tools': toolDefs,
+        if (allowTools) 'tool_choice': 'auto',
+        'stream': stream,
+      };
+      request =
+          http.Request('POST', Uri.parse('$requestBaseUrl/chat/completions'))
+            ..headers.addAll({
+              ...headers,
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+              'Accept': stream
+                  ? 'text/event-stream, application/json'
+                  : 'application/json',
+            })
+            ..body = jsonEncode(requestBody);
+    }
     final requestTimeout = Duration(
       milliseconds: timeoutMs > 0 ? timeoutMs : 120000,
     );
@@ -616,6 +649,19 @@ class AgentService {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final body = await utf8.decodeStream(byteStream);
         throw AgentHttpException.fromParts(response.statusCode, body);
+      }
+      if (native) {
+        final body = await utf8.decodeStream(byteStream);
+        final decoded = jsonDecode(body);
+        if (decoded is! Map) {
+          throw const FormatException('Respons provider bukan objek JSON.');
+        }
+        final payload = Map<String, dynamic>.from(decoded);
+        final result = protocol == ProviderProtocol.anthropic
+            ? parseAnthropicResponse(payload)
+            : parseGeminiResponse(payload);
+        _emitInsight('', result.usage);
+        return result.message;
       }
       return await (stream
           ? _decodeCompletionStream(byteStream)

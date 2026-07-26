@@ -931,6 +931,107 @@ void main() {
     expect(await agent.send('x'), 'ok');
     expect(capturedTotal, 7);
   });
+
+  test('base URL Anthropic diarahkan ke /v1/messages native', () async {
+    late Uri calledUrl;
+    late Map<String, String> calledHeaders;
+    late Map<String, dynamic> calledBody;
+    var capturedTotal = 0;
+    final client = MockClient((request) async {
+      calledUrl = request.url;
+      calledHeaders = request.headers;
+      calledBody = jsonDecode(request.body) as Map<String, dynamic>;
+      return http.Response(
+        jsonEncode({
+          'content': [
+            {'type': 'text', 'text': 'halo dari claude'},
+          ],
+          'usage': {'input_tokens': 5, 'output_tokens': 4},
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final agent = AgentService(
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: 'sk-ant-xyz',
+      model: 'claude-opus-4-8',
+      workspace: '.',
+      requestPermission: (_, _) async => PermissionDecision.reject,
+      onToolActivity: (_, _, _, _) {},
+      onStatus: (_) {},
+      onInsight: ({reasoning, promptTokens, completionTokens, totalTokens}) {
+        if (totalTokens != null) capturedTotal = totalTokens;
+      },
+      allowWrite: false,
+      allowTerminal: false,
+      environment: const {},
+      timeoutMs: 1000,
+      headers: const {},
+      httpClient: client,
+    );
+    addTearDown(agent.dispose);
+
+    expect(await agent.send('hai'), 'halo dari claude');
+    expect(calledUrl.toString(), 'https://api.anthropic.com/v1/messages');
+    expect(calledHeaders['x-api-key'], 'sk-ant-xyz');
+    expect(calledHeaders['anthropic-version'], '2023-06-01');
+    // Kunci Bearer OpenAI tidak boleh ikut terkirim ke endpoint native.
+    expect(calledHeaders.containsKey('authorization'), isFalse);
+    expect(calledBody['model'], 'claude-opus-4-8');
+    expect(calledBody['stream'], false);
+    expect(capturedTotal, 9);
+  });
+
+  test('base URL Gemini native diarahkan ke generateContent', () async {
+    late Uri calledUrl;
+    late Map<String, String> calledHeaders;
+    final client = MockClient((request) async {
+      calledUrl = request.url;
+      calledHeaders = request.headers;
+      return http.Response(
+        jsonEncode({
+          'candidates': [
+            {
+              'content': {
+                'parts': [
+                  {'text': 'halo dari gemini'},
+                ],
+              },
+            },
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final agent = AgentService(
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+      apiKey: 'goog-secret',
+      model: 'gemini-2.5-pro',
+      workspace: '.',
+      requestPermission: (_, _) async => PermissionDecision.reject,
+      onToolActivity: (_, _, _, _) {},
+      onStatus: (_) {},
+      allowWrite: false,
+      allowTerminal: false,
+      environment: const {},
+      timeoutMs: 1000,
+      headers: const {},
+      httpClient: client,
+    );
+    addTearDown(agent.dispose);
+
+    expect(await agent.send('hai'), 'halo dari gemini');
+    expect(
+      calledUrl.toString(),
+      'https://generativelanguage.googleapis.com/v1beta/models/'
+      'gemini-2.5-pro:generateContent',
+    );
+    expect(calledHeaders['x-goog-api-key'], 'goog-secret');
+    // Kunci tidak boleh bocor ke query string.
+    expect(calledUrl.toString(), isNot(contains('goog-secret')));
+  });
 }
 
 class _StreamingClient extends http.BaseClient {

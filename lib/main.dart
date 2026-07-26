@@ -5779,9 +5779,13 @@ class _ProviderPreset {
 
 const _customProviderLabel = 'Custom / OpenAI-compatible';
 
-// Every provider here speaks the OpenAI Chat Completions protocol, so only the
-// Base URL, example models, and where-to-get-the-key hint differ. Claude and
-// Gemini are reached through OpenRouter or Google's OpenAI-compatible endpoint.
+// Most providers here speak the OpenAI Chat Completions protocol, so only the
+// Base URL, example models, and where-to-get-the-key hint differ. The two
+// "(native)" presets point at api.anthropic.com and Google's generateContent
+// endpoint; AgentService.detectProviderProtocol() routes those through the
+// native adapters (x-api-key / x-goog-api-key), so no OpenAI-compat proxy is
+// needed. Claude and Gemini can also be reached via OpenRouter or Google's
+// OpenAI-compatible endpoint below.
 const _providerPresets = <_ProviderPreset>[
   _ProviderPreset(
     label: _customProviderLabel,
@@ -5796,6 +5800,19 @@ const _providerPresets = <_ProviderPreset>[
     keyHint: 'API key dari platform.openai.com/api-keys',
   ),
   _ProviderPreset(
+    label: 'Anthropic Claude (native)',
+    baseUrl: 'https://api.anthropic.com',
+    models: ['claude-opus-4-8', 'claude-sonnet-5', 'claude-haiku-4-5'],
+    keyHint: 'API key dari console.anthropic.com — protokol Messages native.',
+  ),
+  _ProviderPreset(
+    label: 'Google Gemini (native)',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
+    keyHint:
+        'API key dari aistudio.google.com/apikey — generateContent native.',
+  ),
+  _ProviderPreset(
     label: 'OpenRouter (Claude, Gemini, dll)',
     baseUrl: 'https://openrouter.ai/api/v1',
     models: [
@@ -5806,7 +5823,7 @@ const _providerPresets = <_ProviderPreset>[
     keyHint: 'Satu key untuk banyak model — openrouter.ai/keys',
   ),
   _ProviderPreset(
-    label: 'Google Gemini',
+    label: 'Google Gemini (OpenAI-compatible)',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     models: ['gemini-2.5-pro', 'gemini-2.5-flash'],
     keyHint: 'API key dari aistudio.google.com/apikey',
