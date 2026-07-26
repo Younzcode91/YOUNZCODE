@@ -294,6 +294,8 @@ class _AgentHomePageState extends State<AgentHomePage> {
   // Bumped whenever _notifications changes so an open notifications dialog
   // rebuilds to show additions made while it is on screen.
   final _notificationRevision = ValueNotifier<int>(0);
+  // Cumulative provider token spend for the active chat session.
+  int _sessionTokens = 0;
   late final PersistentTerminalService _terminalService =
       PersistentTerminalService(
         onOutput: (output) {
@@ -629,6 +631,26 @@ class _AgentHomePageState extends State<AgentHomePage> {
           'Agent finished',
           'Task completed in ${_lastTurnDuration.inSeconds}s.',
         );
+      },
+      onInsight: ({reasoning, promptTokens, completionTokens, totalTokens}) {
+        if (!mounted) return;
+        setState(() {
+          if (totalTokens != null) _sessionTokens += totalTokens;
+          final thought = reasoning?.trim() ?? '';
+          if (thought.isNotEmpty) {
+            final trimmed = thought.length > 600
+                ? '${thought.substring(0, 600)}…'
+                : thought;
+            _activities.add(
+              _AgentActivity(
+                id: 'reasoning-${DateTime.now().microsecondsSinceEpoch}',
+                name: 'reasoning',
+                detail: trimmed,
+                state: 'selesai',
+              ),
+            );
+          }
+        });
       },
     );
   }
@@ -1761,6 +1783,7 @@ class _AgentHomePageState extends State<AgentHomePage> {
     unawaited(_agent?.dispose());
     setState(() {
       _activeChatId = session.id;
+      _sessionTokens = 0;
       _entries
         ..clear()
         ..addAll(session.entries);
@@ -2288,6 +2311,7 @@ class _AgentHomePageState extends State<AgentHomePage> {
                           busy: _busy,
                           model: _model,
                           status: _agentStatus,
+                          tokens: _sessionTokens,
                           gitStatus: _gitStatus,
                           onGit: _showGitDetails,
                           workspaceTrusted: _workspaceTrusted,
@@ -5635,6 +5659,7 @@ class _StatusBar extends StatelessWidget {
     required this.busy,
     required this.model,
     required this.status,
+    required this.tokens,
     required this.gitStatus,
     required this.onGit,
     required this.workspaceTrusted,
@@ -5646,6 +5671,7 @@ class _StatusBar extends StatelessWidget {
   final bool busy;
   final String model;
   final String status;
+  final int tokens;
   final GitStatus gitStatus;
   final VoidCallback onGit;
   final bool workspaceTrusted;
@@ -5679,7 +5705,8 @@ class _StatusBar extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Environment: Windows  |  Model: $model  |  Build: v$_appVersion',
+              'Environment: Windows  |  Model: $model  |  Build: v$_appVersion'
+              '${tokens > 0 ? '  |  Tokens: $tokens' : ''}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(

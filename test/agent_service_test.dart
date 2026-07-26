@@ -846,6 +846,91 @@ void main() {
 
     expect(await agent.send('sapa'), 'Halo');
   });
+
+  test('menangkap reasoning dan token usage dari stream', () async {
+    String? capturedReasoning;
+    int? capturedTotal;
+    final client = _StreamingClient([
+      'data: {"choices":[{"delta":{"role":"assistant","reasoning_content":"pikir "}}]}\n\n',
+      'data: {"choices":[{"delta":{"reasoning_content":"dulu"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"Halo"}}]}\n\n',
+      'data: {"choices":[{"finish_reason":"stop","delta":{}}],'
+          '"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n\n',
+      'data: [DONE]\n\n',
+    ]);
+    final agent = AgentService(
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'key',
+      model: 'model',
+      workspace: '.',
+      requestPermission: (_, _) async => PermissionDecision.reject,
+      onToolActivity: (_, _, _, _) {},
+      onStatus: (_) {},
+      onInsight: ({reasoning, promptTokens, completionTokens, totalTokens}) {
+        if (reasoning != null) capturedReasoning = reasoning;
+        if (totalTokens != null) capturedTotal = totalTokens;
+      },
+      allowWrite: false,
+      allowTerminal: false,
+      environment: const {},
+      timeoutMs: 1000,
+      headers: const {},
+      httpClient: client,
+    );
+    addTearDown(agent.dispose);
+
+    // Reasoning must not leak into the answer, but is reported out-of-band.
+    expect(await agent.send('sapa'), 'Halo');
+    expect(capturedReasoning, 'pikir dulu');
+    expect(capturedTotal, 15);
+  });
+
+  test('menangkap token usage dari respons JSON non-stream', () async {
+    int? capturedTotal;
+    final client = MockClient((request) async {
+      return http.Response(
+        jsonEncode({
+          'choices': [
+            {
+              'message': {
+                'role': 'assistant',
+                'content': 'ok',
+                'reasoning_content': 'karena begitu',
+              },
+            },
+          ],
+          'usage': {
+            'prompt_tokens': 3,
+            'completion_tokens': 4,
+            'total_tokens': 7,
+          },
+        }),
+        200,
+      );
+    });
+    final agent = AgentService(
+      baseUrl: 'https://example.test/v1',
+      apiKey: 'key',
+      model: 'model',
+      workspace: '.',
+      requestPermission: (_, _) async => PermissionDecision.reject,
+      onToolActivity: (_, _, _, _) {},
+      onStatus: (_) {},
+      onInsight: ({reasoning, promptTokens, completionTokens, totalTokens}) {
+        if (totalTokens != null) capturedTotal = totalTokens;
+      },
+      allowWrite: false,
+      allowTerminal: false,
+      environment: const {},
+      timeoutMs: 1000,
+      headers: const {},
+      httpClient: client,
+    );
+    addTearDown(agent.dispose);
+
+    expect(await agent.send('x'), 'ok');
+    expect(capturedTotal, 7);
+  });
 }
 
 class _StreamingClient extends http.BaseClient {

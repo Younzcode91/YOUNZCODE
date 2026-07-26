@@ -17,6 +17,17 @@ typedef AgentStatus = void Function(String status);
 typedef AgentCheckpoint = void Function(List<Map<String, dynamic>> messages);
 typedef AgentChanges = void Function(WorkspaceTurnChanges? changes);
 
+// Out-of-band signals for a completion: the model's reasoning (thinking) tokens
+// and the provider's token usage. Reasoning is surfaced here rather than kept in
+// the message history, so it is never echoed back to the provider.
+typedef AgentInsight =
+    void Function({
+      String? reasoning,
+      int? promptTokens,
+      int? completionTokens,
+      int? totalTokens,
+    });
+
 class AgentCancelledException implements Exception {
   const AgentCancelledException([
     this.message = 'Tugas dibatalkan oleh pengguna.',
@@ -80,6 +91,7 @@ class AgentService {
     this.mcpClients = const [],
     this.onCheckpoint,
     this.onChanges,
+    this.onInsight,
     http.Client? httpClient,
   }) : _tools = WorkspaceTools(
          root: workspace,
@@ -117,6 +129,7 @@ class AgentService {
   final List<McpClient> mcpClients;
   final AgentCheckpoint? onCheckpoint;
   final AgentChanges? onChanges;
+  final AgentInsight? onInsight;
   final WorkspaceTools _tools;
   final http.Client? _injectedHttpClient;
   final List<Map<String, dynamic>> _messages = [];
@@ -650,6 +663,8 @@ class AgentService {
   ) async {
     final plainBody = StringBuffer();
     final content = StringBuffer();
+    final reasoning = StringBuffer();
+    Object? usage;
     final toolCalls = <int, Map<String, dynamic>>{};
     Map<String, dynamic>? fullMessage;
     var role = 'assistant';
@@ -685,6 +700,7 @@ class AgentService {
         if (payload['error'] != null) {
           throw AgentHttpException.fromParts(502, jsonEncode(payload));
         }
+        if (payload['usage'] != null) usage = payload['usage'];
         final choices = payload['choices'] as List<dynamic>? ?? const [];
         if (choices.isEmpty) continue;
         final choice = Map<String, dynamic>.from(choices.first as Map);
@@ -699,6 +715,9 @@ class AgentService {
         final delta = Map<String, dynamic>.from(rawDelta);
         if (delta['role'] is String) role = delta['role'] as String;
         content.write(_messageText(delta['content']));
+        reasoning.write(
+          _messageText(delta['reasoning_content'] ?? delta['reasoning']),
+        );
         for (final rawCall
             in delta['tool_calls'] as List<dynamic>? ?? const []) {
           final call = Map<String, dynamic>.from(rawCall as Map);
@@ -738,9 +757,16 @@ class AgentService {
       if (body.isEmpty) {
         throw StateError('Provider mengembalikan respons kosong.');
       }
+      // _messageFromPayload emits its own insight for the non-SSE path.
       return _messageFromPayload(jsonDecode(body) as Map<String, dynamic>);
     }
-    if (fullMessage != null) return fullMessage;
+    _emitInsight(reasoning.toString(), usage);
+    if (fullMessage != null) {
+      fullMessage
+        ..remove('reasoning_content')
+        ..remove('reasoning');
+      return fullMessage;
+    }
     final orderedCalls = toolCalls.entries.toList()
       ..sort((left, right) => left.key.compareTo(right.key));
     if (content.isEmpty && orderedCalls.isEmpty) {
@@ -760,7 +786,40 @@ class AgentService {
       throw StateError('Provider tidak mengembalikan pilihan jawaban.');
     }
     final choice = Map<String, dynamic>.from(choices.first as Map);
-    return Map<String, dynamic>.from(choice['message'] as Map);
+    final message = Map<String, dynamic>.from(choice['message'] as Map);
+    _emitInsight(
+      _messageText(message['reasoning_content'] ?? message['reasoning']),
+      payload['usage'],
+    );
+    // Keep reasoning out of the conversation history sent back to the provider.
+    message.remove('reasoning_content');
+    message.remove('reasoning');
+    return message;
+  }
+
+  void _emitInsight(String reasoning, Object? usage) {
+    final callback = onInsight;
+    if (callback == null) return;
+    int? asInt(Object? value) => value is num ? value.toInt() : null;
+    final usageMap = usage is Map ? usage : null;
+    final trimmedReasoning = reasoning.trim();
+    final prompt = asInt(usageMap?['prompt_tokens']);
+    final completion = asInt(usageMap?['completion_tokens']);
+    final total =
+        asInt(usageMap?['total_tokens']) ??
+        ((prompt != null && completion != null) ? prompt + completion : null);
+    if (trimmedReasoning.isEmpty &&
+        prompt == null &&
+        completion == null &&
+        total == null) {
+      return;
+    }
+    callback(
+      reasoning: trimmedReasoning.isEmpty ? null : trimmedReasoning,
+      promptTokens: prompt,
+      completionTokens: completion,
+      totalTokens: total,
+    );
   }
 
   static String _messageText(Object? value) {
