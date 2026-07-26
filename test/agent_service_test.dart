@@ -479,6 +479,51 @@ void main() {
     expect(requestCount, 2);
   });
 
+  test('HTTP 529 overloaded Anthropic dicoba ulang lalu berhasil', () async {
+    var requestCount = 0;
+    final client = MockClient((request) async {
+      requestCount++;
+      if (requestCount == 1) {
+        return http.Response(
+          jsonEncode({
+            'type': 'error',
+            'error': {'type': 'overloaded_error', 'message': 'Overloaded'},
+          }),
+          529,
+        );
+      }
+      return http.Response(
+        jsonEncode({
+          'content': [
+            {'type': 'text', 'text': 'pulih'},
+          ],
+          'usage': {'input_tokens': 3, 'output_tokens': 2},
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    });
+    final agent = AgentService(
+      baseUrl: 'https://api.anthropic.com',
+      apiKey: 'sk-ant',
+      model: 'claude-opus-4-8',
+      workspace: '.',
+      requestPermission: (_, _) async => PermissionDecision.reject,
+      onToolActivity: (_, _, _, _) {},
+      onStatus: (_) {},
+      allowWrite: false,
+      allowTerminal: false,
+      environment: const {},
+      timeoutMs: 1000,
+      headers: const {},
+      httpClient: client,
+    );
+    addTearDown(agent.dispose);
+
+    expect(await agent.send('coba'), 'pulih');
+    expect(requestCount, 2);
+  });
+
   test('stream putus beralih ke respons non-stream', () async {
     final client = _FlakyStreamingClient(failuresBeforeSuccess: 3);
     final statuses = <String>[];

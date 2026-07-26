@@ -1071,7 +1071,20 @@ class AgentHttpException implements Exception {
   final int? statusCode;
 
   bool get isRetryable =>
-      const {408, 425, 429, 502, 503, 504, 520, 522, 524}.contains(statusCode);
+      // 529 is Anthropic's overloaded_error — a transient overload distinct from
+      // 429 rate-limiting, and meant to be retried with backoff like 502/503/504.
+      const {
+        408,
+        425,
+        429,
+        502,
+        503,
+        504,
+        520,
+        522,
+        524,
+        529,
+      }.contains(statusCode);
 
   @override
   String toString() => message;

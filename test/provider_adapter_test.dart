@@ -266,6 +266,69 @@ void main() {
       expect(parsed.usage!['total_tokens'], 35);
     });
 
+    test('id gemini-call yang berulang antar-turn tidak salah-nama respons', () {
+      // Gemini synthesizes tool-call ids that reset per response, so the SAME
+      // id ('gemini-call-0') recurs across steps with different function names.
+      // Each tool result must resolve to the function from ITS OWN turn.
+      final built = buildGeminiRequest(
+        baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+        apiKey: 'k',
+        model: 'gemini-2.5-pro',
+        messages: [
+          {'role': 'user', 'content': 'step 1'},
+          {
+            'role': 'assistant',
+            'content': null,
+            'tool_calls': [
+              {
+                'id': 'gemini-call-0',
+                'type': 'function',
+                'function': {'name': 'read_file', 'arguments': '{}'},
+              },
+            ],
+          },
+          {
+            'role': 'tool',
+            'tool_call_id': 'gemini-call-0',
+            'content': 'contents of A',
+          },
+          {
+            'role': 'assistant',
+            'content': null,
+            'tool_calls': [
+              {
+                'id': 'gemini-call-0',
+                'type': 'function',
+                'function': {'name': 'list_dir', 'arguments': '{}'},
+              },
+            ],
+          },
+          {
+            'role': 'tool',
+            'tool_call_id': 'gemini-call-0',
+            'content': 'a.txt\nb.txt',
+          },
+        ],
+        tools: const [],
+      );
+
+      final contents = built.body['contents'] as List;
+      // user, model(read_file), user(resp read_file), model(list_dir),
+      // user(resp list_dir)
+      expect(contents.length, 5);
+      final firstResp =
+          (((contents[2] as Map)['parts'] as List).first
+                  as Map)['functionResponse']
+              as Map;
+      // Would be mislabeled 'list_dir' under a global last-write-wins map.
+      expect(firstResp['name'], 'read_file');
+      final secondResp =
+          (((contents[4] as Map)['parts'] as List).first
+                  as Map)['functionResponse']
+              as Map;
+      expect(secondResp['name'], 'list_dir');
+    });
+
     test('respons tanpa tool_calls tidak menyertakan kunci tool_calls', () {
       final parsed = parseGeminiResponse({
         'candidates': [

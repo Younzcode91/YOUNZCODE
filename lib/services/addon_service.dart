@@ -54,10 +54,10 @@ class AddonService {
       return p.join(localAppData, 'YOUNZCODE', 'addons');
     }
     final home = env['HOME'];
-    if (home == null || home.trim().isEmpty) {
-      throw const AddonImportException('HOME is not available.');
-    }
     if (Platform.isMacOS) {
+      if (home == null || home.trim().isEmpty) {
+        throw const AddonImportException('HOME is not available.');
+      }
       return p.join(
         home,
         'Library',
@@ -66,12 +66,17 @@ class AddonService {
         'addons',
       );
     }
-    // Linux and other POSIX platforms: honour XDG_DATA_HOME when set.
+    // Linux and other POSIX platforms: honour XDG_DATA_HOME when set. Per the XDG
+    // spec it locates the data dir independently of HOME, so require HOME only
+    // for the ~/.local/share fallback.
     final xdgData = env['XDG_DATA_HOME'];
-    final base = (xdgData != null && xdgData.trim().isNotEmpty)
-        ? xdgData
-        : p.join(home, '.local', 'share');
-    return p.join(base, 'YOUNZCODE', 'addons');
+    if (xdgData != null && xdgData.trim().isNotEmpty) {
+      return p.join(xdgData, 'YOUNZCODE', 'addons');
+    }
+    if (home == null || home.trim().isEmpty) {
+      throw const AddonImportException('HOME is not available.');
+    }
+    return p.join(home, '.local', 'share', 'YOUNZCODE', 'addons');
   }
 
   Future<List<Addon>> load() async {

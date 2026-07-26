@@ -212,20 +212,16 @@ NativeRequest buildGeminiRequest({
   required List<Map<String, Object>> tools,
   Map<String, String> extraHeaders = const {},
 }) {
-  // Gemini's functionResponse is keyed by tool name, not id, so map ids back.
-  final idToName = <String, String>{};
-  for (final message in messages) {
-    if (message['role'] == 'assistant' && message['tool_calls'] is List) {
-      for (final call in message['tool_calls'] as List) {
-        if (call is Map && call['function'] is Map) {
-          idToName['${call['id']}'] = '${(call['function'] as Map)['name']}';
-        }
-      }
-    }
-  }
-
   final systemParts = <String>[];
   final contents = <Map<String, dynamic>>[];
+  // Gemini's functionResponse is keyed by tool NAME, not id. We resolve each
+  // tool result's name from the assistant turn that requested it by keeping a
+  // running id->name map updated as we walk the history. A tool result always
+  // follows its own assistant turn (before the next one), so this stays correct
+  // even when synthesized call ids repeat across turns — Gemini ids are only
+  // unique within a single response, so a global pre-pass would let a later
+  // turn mislabel an earlier turn's result.
+  final idToName = <String, String>{};
 
   for (final message in messages) {
     final role = message['role'];
@@ -253,9 +249,13 @@ NativeRequest buildGeminiRequest({
           if (call is! Map) continue;
           final function = call['function'];
           if (function is! Map) continue;
+          final name = '${function['name']}';
+          // Bind this id to its name now so a following tool result resolves
+          // against this turn, before any later turn can reuse the same id.
+          idToName['${call['id']}'] = name;
           parts.add({
             'functionCall': {
-              'name': '${function['name']}',
+              'name': name,
               'args': _decodeArguments(function['arguments']),
             },
           });
