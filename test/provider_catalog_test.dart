@@ -55,13 +55,36 @@ void main() {
     );
   });
 
-  test('melempar pada status non-2xx', () async {
-    final client = MockClient((_) async => http.Response('nope', 401));
-    await expectLater(
-      fetchProviderModels('https://x.test/v1', 'k', client: client),
-      throwsA(isA<http.ClientException>()),
-    );
-  });
+  test(
+    'HTTP 401 AgentRouter menjelaskan pembatasan identitas client',
+    () async {
+      final client = MockClient(
+        (_) async => http.Response(
+          jsonEncode({
+            'error': {'message': 'unauthorized client detected'},
+          }),
+          401,
+        ),
+      );
+      await expectLater(
+        fetchProviderModels('https://agentrouter.org/v1', 'k', client: client),
+        throwsA(
+          isA<ProviderCatalogException>()
+              .having((error) => error.statusCode, 'statusCode', 401)
+              .having(
+                (error) => error.message,
+                'message',
+                allOf(
+                  contains('identitas client YOUNZCODE'),
+                  contains('https://agentrouter.org/v1'),
+                  contains('di-whitelist'),
+                  contains('unauthorized client detected'),
+                ),
+              ),
+        ),
+      );
+    },
+  );
 
   test('menolak Base URL non-HTTPS non-loopback', () async {
     final client = MockClient((_) async => http.Response('[]', 200));

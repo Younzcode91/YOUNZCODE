@@ -8,6 +8,25 @@ Editor workspace menyediakan syntax highlighting, autocomplete lokal (`Ctrl+Spac
 
 Kontrol debugger: `F5` untuk mulai/lanjut, `F10` untuk step over, `F11` untuk step into, dan `Shift+F11` untuk step out.
 
+## Fitur pengembangan
+
+- Checkpoint perubahan tersimpan per workspace dan dapat dipulihkan dari Inspector.
+- Hybrid code intelligence menggabungkan pencarian istilah Indonesia/Inggris, symbol index, go-to-definition, references, dan autocomplete workspace.
+- Perintah `/agents tugas 1 | tugas 2` menjalankan beberapa agent secara paralel pada branch dan Git worktree yang terisolasi.
+- Perintah `/goal <tujuan>` menyimpan tujuan per chat dan menjalankan turn lanjutan otomatis sampai agent menandainya selesai atau terblokir. Staged edit dipertahankan sepanjang rangkaian goal.
+- Git Center mendukung status detail, stage/unstage, discard, commit, branch, merge/abort, push, serta pengelolaan worktree.
+- Add-on Manager menampilkan health check, latensi, log, dan kebijakan izin per tool MCP.
+- Provider mendukung urutan fallback, retry/failover, harga token, anggaran bulanan, dan dashboard `/usage`.
+- Respons provider kosong dicoba ulang otomatis dengan mode transport alternatif, serta tidak lagi ditampilkan sebagai kartu agent sukses tanpa isi.
+- Model Settings menempatkan API key sebelum Fetch, mengenali preset AgentRouter, dan menampilkan detail autentikasi yang berguna untuk HTTP 401.
+- Quality gate otomatis menjalankan analyzer atau test yang relevan setelah perubahan diterima, lalu menawarkan rollback bila gagal.
+- Lampiran chat membaca teks dari Markdown, PDF, DOCX, dan XLSX. PDF hasil scan tetap memerlukan OCR; format lama `.doc`/`.xls` perlu disimpan ulang sebagai `.docx`/`.xlsx`.
+- Perintah `/download URL` atau pesan seperti `tolong download URL` mengunduh media publik ke folder `downloads` workspace melalui yt-dlp, dengan validasi URL, konfirmasi hak akses, progres, dan pembatalan.
+- Agent Browser berbasis Microsoft Edge WebView2 dapat membuka URL HTTPS atau preview `localhost`, membaca halaman, klik, mengetik, upload file workspace, dan menyimpan screenshot. Upload serta aksi penting seperti delete/submit/publish/login selalu melewati approval.
+- Fondasi agent dipisahkan menjadi transport completion, sesi edit transaksional, routing provider, usage store, checkpoint store, dan quality gate agar lebih mudah diuji serta dikembangkan.
+
+Shell aplikasi tetap berada di `lib/main.dart`, sedangkan workflow state dipisahkan ke `lib/app/`: lifecycle workspace, konfigurasi agent, browser, command, turn agent, serta session/editor/terminal. Service dan panel browser berada di file mandiri agar `main.dart` tidak kembali menumpuk. Semuanya memakai Dart `part` dalam satu library agar private state tetap tertutup tanpa membuat siklus import.
+
 ## Menjalankan
 
 ```powershell
@@ -29,7 +48,13 @@ File `.env` dan variannya dapat dibuka secara manual setelah konfirmasi keamanan
 
 Percakapan disimpan otomatis secara lokal per workspace. Tombol `NEW CHAT` membuat sesi baru tanpa menghapus sesi sebelumnya; gunakan menu `HISTORY` untuk membuka, melanjutkan, atau menghapus percakapan lama. Maksimal 50 sesi terbaru disimpan.
 
+Gunakan `/goal tujuan yang ingin diselesaikan` untuk pekerjaan panjang. Statusnya tampil di atas pemilih model. Perintah `/goal status`, `/goal resume`, `/goal stop`, dan `/goal clear` mengelola goal aktif. Delapan kelanjutan otomatis diizinkan per batch; bila pekerjaan masih belum selesai, goal dijeda dengan checkpoint tetap tersimpan dan dapat dilanjutkan melalui `/goal resume`. Goal aktif yang dipulihkan setelah aplikasi dibuka ulang juga dijeda sampai pengguna memilih resume, agar pekerjaan dan biaya provider tidak berjalan tanpa sepengetahuan pengguna.
+
 Root file tree dapat dilipat dengan mengklik baris folder workspace. Composer memiliki `BUILD` mode dan `PLAN` mode; Plan Mode hanya menyediakan tool baca/search, menonaktifkan write, terminal, dan MCP eksternal, lalu meminta agent menghasilkan rencana tanpa mengubah sistem.
+
+Agent Browser dapat dibuka dari command rail, tab `Browser`, command palette, atau `/browser URL`. Browser memakai profil khusus di `%LOCALAPPDATA%\YOUNZCODE\AgentBrowser`, terpisah dari profil Edge pribadi. Situs publik wajib HTTPS; HTTP hanya diizinkan untuk preview `localhost`. Microsoft Edge WebView2 Runtime diperlukan.
+
+Saat Agent Browser dibuka otomatis oleh tool, aplikasi kembali ke chat setelah turn selesai agar jawaban langsung terlihat. Buka/read/klik aman tidak menampilkan approval; upload, submit, password, delete, publish, pembayaran, dan aksi penting lain tetap meminta konfirmasi.
 
 Menu `ADD-ONS` dapat mengimpor file atau folder lokal:
 
@@ -48,6 +73,8 @@ Konfigurasi OpenAI:
 - Model: model yang mendukung function/tool calling
 
 Provider lain dapat digunakan jika endpoint-nya kompatibel dengan OpenAI Chat Completions dan mendukung tool calling.
+
+Endpoint native Anthropic dan Gemini juga dikenali otomatis. Tambahkan beberapa Base URL fallback di Model Settings untuk failover berurutan. Harga input/output per satu juta token dan anggaran token bulanan bersifat opsional; statistik pemakaian dapat dibuka dengan `/usage`.
 
 ## Build Windows
 
@@ -74,7 +101,7 @@ Distribusikan seluruh isi folder `Release`, bukan hanya file `.exe`, karena apli
 Installer Inno Setup yang sudah dikompilasi tersedia di:
 
 ```text
-installer\output\YOUNZCODE-Setup-1.0.0.exe
+  installer\output\YOUNZCODE-Setup-1.3.5.exe
 ```
 
 Untuk membangun ulang installer:
@@ -84,3 +111,5 @@ Untuk membangun ulang installer:
 ```
 
 Catatan: Flutter Windows menolak karakter `!` pada path proyek. Jika perlu membangun ulang pada komputer ini, salin proyek sementara ke path tanpa karakter tersebut, misalnya `C:\kode_agent_build`, lalu jalankan perintah build dari sana.
+
+Bundle installer menyertakan `tools\yt-dlp.exe` dan `tools\ffmpeg.exe`. Untuk development build, keduanya juga dapat tersedia di `PATH`; lokasi alternatif dapat ditentukan dengan `YOUNZCODE_YTDLP` dan `YOUNZCODE_FFMPEG`.

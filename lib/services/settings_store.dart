@@ -59,6 +59,11 @@ class AppSettings {
     this.approvalMode = ApprovalMode.askForApproval,
     this.timeoutMs = 120000,
     this.models = const [],
+    this.fallbackBaseUrls = const ['http://127.0.0.1:20128/v1'],
+    this.inputCostPerMillion = 0,
+    this.outputCostPerMillion = 0,
+    this.monthlyTokenBudget = 0,
+    this.qualityGateEnabled = true,
   });
 
   final String baseUrl;
@@ -69,6 +74,11 @@ class AppSettings {
   final ApprovalMode approvalMode;
   final int timeoutMs;
   final List<String> models;
+  final List<String> fallbackBaseUrls;
+  final double inputCostPerMillion;
+  final double outputCostPerMillion;
+  final int monthlyTokenBudget;
+  final bool qualityGateEnabled;
 }
 
 class SettingsStore {
@@ -80,6 +90,11 @@ class SettingsStore {
   static const _approvalModeKey = 'approval_mode';
   static const _timeoutMsKey = 'timeout_ms';
   static const _modelsKey = 'models';
+  static const _fallbackBaseUrlsKey = 'fallback_base_urls';
+  static const _inputCostKey = 'input_cost_per_million';
+  static const _outputCostKey = 'output_cost_per_million';
+  static const _monthlyTokenBudgetKey = 'monthly_token_budget';
+  static const _qualityGateEnabledKey = 'quality_gate_enabled';
 
   Future<AppSettings> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -99,6 +114,20 @@ class SettingsStore {
       for (final stored in storedModels)
         normalizeProviderModel(stored, baseUrl: baseUrl),
     }.where((item) => item.isNotEmpty).toList();
+    final storedFallbacks =
+        preferences.getStringList(_fallbackBaseUrlsKey) ??
+        const ['http://127.0.0.1:20128/v1'];
+    final fallbacks = <String>[];
+    for (final candidate in storedFallbacks) {
+      try {
+        final normalized = normalizeProviderBaseUrl(candidate);
+        if (normalized != baseUrl && !fallbacks.contains(normalized)) {
+          fallbacks.add(normalized);
+        }
+      } on FormatException {
+        // Drop invalid historical fallback URLs.
+      }
+    }
     if (baseUrl != storedBaseUrl ||
         model != storedModel ||
         models.length != storedModels.length ||
@@ -120,6 +149,11 @@ class SettingsStore {
         preferences.getString(_approvalModeKey),
       ),
       timeoutMs: preferences.getInt(_timeoutMsKey) ?? 120000,
+      fallbackBaseUrls: fallbacks,
+      inputCostPerMillion: preferences.getDouble(_inputCostKey) ?? 0,
+      outputCostPerMillion: preferences.getDouble(_outputCostKey) ?? 0,
+      monthlyTokenBudget: preferences.getInt(_monthlyTokenBudgetKey) ?? 0,
+      qualityGateEnabled: preferences.getBool(_qualityGateEnabledKey) ?? true,
     );
   }
 
@@ -132,6 +166,13 @@ class SettingsStore {
       for (final stored in settings.models)
         normalizeProviderModel(stored, baseUrl: baseUrl),
     }.where((item) => item.isNotEmpty).toList();
+    final fallbackBaseUrls = <String>[];
+    for (final candidate in settings.fallbackBaseUrls) {
+      final normalized = normalizeProviderBaseUrl(candidate);
+      if (normalized != baseUrl && !fallbackBaseUrls.contains(normalized)) {
+        fallbackBaseUrls.add(normalized);
+      }
+    }
     await Future.wait([
       preferences.setString(_baseUrlKey, baseUrl),
       preferences.setString(_modelKey, model),
@@ -141,6 +182,20 @@ class SettingsStore {
       preferences.setString(_approvalModeKey, settings.approvalMode.name),
       preferences.setInt(_timeoutMsKey, settings.timeoutMs),
       preferences.setStringList(_modelsKey, models),
+      preferences.setStringList(_fallbackBaseUrlsKey, fallbackBaseUrls),
+      preferences.setDouble(
+        _inputCostKey,
+        settings.inputCostPerMillion.clamp(0, double.infinity).toDouble(),
+      ),
+      preferences.setDouble(
+        _outputCostKey,
+        settings.outputCostPerMillion.clamp(0, double.infinity).toDouble(),
+      ),
+      preferences.setInt(
+        _monthlyTokenBudgetKey,
+        settings.monthlyTokenBudget.clamp(0, 1 << 62).toInt(),
+      ),
+      preferences.setBool(_qualityGateEnabledKey, settings.qualityGateEnabled),
     ]);
   }
 }

@@ -19,6 +19,24 @@ class DiffHunk {
 
   String get unified =>
       ['@@ -$oldStart,$oldCount +$newStart,$newCount @@', ...lines].join('\n');
+
+  factory DiffHunk.fromJson(Map<String, dynamic> json) => DiffHunk(
+    id: json['id'] as String,
+    oldStart: json['oldStart'] as int,
+    oldCount: json['oldCount'] as int,
+    newStart: json['newStart'] as int,
+    newCount: json['newCount'] as int,
+    lines: (json['lines'] as List).cast<String>(),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'oldStart': oldStart,
+    'oldCount': oldCount,
+    'newStart': newStart,
+    'newCount': newCount,
+    'lines': lines,
+  };
 }
 
 class WorkspaceFileChange {
@@ -35,6 +53,20 @@ class WorkspaceFileChange {
   final String proposedContent;
   final bool originallyExisted;
   final List<DiffHunk> hunks;
+
+  factory WorkspaceFileChange.fromJson(Map<String, dynamic> json) =>
+      WorkspaceFileChange(
+        path: json['path'] as String,
+        originalContent: json['originalContent'] as String,
+        proposedContent: json['proposedContent'] as String,
+        originallyExisted: json['originallyExisted'] as bool,
+        hunks: (json['hunks'] as List)
+            .map(
+              (item) =>
+                  DiffHunk.fromJson(Map<String, dynamic>.from(item as Map)),
+            )
+            .toList(),
+      );
 
   WorkspaceChangeKind get kind => !originallyExisted
       ? WorkspaceChangeKind.added
@@ -53,6 +85,14 @@ class WorkspaceFileChange {
     '+++ ${proposedContent.isEmpty ? '/dev/null' : 'b/$path'}',
     ...hunks.map((hunk) => hunk.unified),
   ].join('\n');
+
+  Map<String, dynamic> toJson() => {
+    'path': path,
+    'originalContent': originalContent,
+    'proposedContent': proposedContent,
+    'originallyExisted': originallyExisted,
+    'hunks': hunks.map((hunk) => hunk.toJson()).toList(),
+  };
 }
 
 class WorkspaceTurnChanges {
@@ -71,6 +111,29 @@ class WorkspaceTurnChanges {
   final bool applied;
 
   String get unifiedDiff => files.map((file) => file.unifiedDiff).join('\n\n');
+
+  factory WorkspaceTurnChanges.fromJson(Map<String, dynamic> json) =>
+      WorkspaceTurnChanges(
+        id: json['id'] as String,
+        prompt: json['prompt'] as String? ?? '',
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        files: (json['files'] as List)
+            .map(
+              (item) => WorkspaceFileChange.fromJson(
+                Map<String, dynamic>.from(item as Map),
+              ),
+            )
+            .toList(),
+        applied: json['applied'] as bool? ?? false,
+      );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'prompt': prompt,
+    'createdAt': createdAt.toIso8601String(),
+    'files': files.map((file) => file.toJson()).toList(),
+    'applied': applied,
+  };
 }
 
 class UnifiedDiff {

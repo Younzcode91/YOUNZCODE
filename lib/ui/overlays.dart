@@ -95,7 +95,8 @@ class _NotificationDialogState extends State<_NotificationDialog> {
                       ),
                     ),
                   Expanded(
-                    child: ListView.builder(
+                    child: SilkyListView.builder(
+                      silkyConfig: _silkyScrollConfig,
                       itemCount: widget.notifications.length,
                       itemBuilder: (context, index) {
                         final item = widget.notifications[index];
@@ -175,7 +176,8 @@ class _OnboardingDialog extends StatelessWidget {
     title: const Text('Set Up YOUNZCODE'),
     content: SizedBox(
       width: 540,
-      child: SingleChildScrollView(
+      child: SilkySingleChildScrollView(
+        silkyConfig: _silkyScrollConfig,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

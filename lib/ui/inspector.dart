@@ -23,6 +23,7 @@ class _AgentActivity {
     'replace_text' => 'Edit',
     'list_files' => 'Glob',
     'search_text' => 'Grep',
+    'multi_agent' => 'Agent',
     _ when name.startsWith('mcp_') => 'MCP',
     _ => name,
   };
@@ -46,6 +47,7 @@ class _ActivityPanel extends StatelessWidget {
     required this.pendingChanges,
     required this.changeHistory,
     required this.onReviewChanges,
+    required this.onRestoreCheckpoint,
     this.onRevert,
   });
 
@@ -58,6 +60,7 @@ class _ActivityPanel extends StatelessWidget {
   final WorkspaceTurnChanges? pendingChanges;
   final List<WorkspaceTurnChanges> changeHistory;
   final VoidCallback onReviewChanges;
+  final ValueChanged<WorkspaceTurnChanges> onRestoreCheckpoint;
   final VoidCallback? onRevert;
 
   @override
@@ -120,11 +123,13 @@ class _ActivityPanel extends StatelessWidget {
                     changes: pendingChanges,
                     history: changeHistory,
                     onReview: onReviewChanges,
+                    onRestoreCheckpoint: onRestoreCheckpoint,
                     onRevert: onRevert,
                   )
                 : section == _InspectorSection.plan
                 ? _InspectorPlan(activities: activities, busy: busy)
-                : ListView(
+                : SilkyListView(
+                    silkyConfig: _silkyScrollConfig,
                     padding: const EdgeInsets.all(18),
                     children: [
                       Row(
@@ -262,7 +267,8 @@ class _InspectorPlan extends StatelessWidget {
         ),
       );
     }
-    return ListView.separated(
+    return SilkyListView.separated(
+      silkyConfig: _silkyScrollConfig,
       padding: const EdgeInsets.all(18),
       itemCount: activities.length,
       separatorBuilder: (_, _) => const SizedBox(height: 10),
@@ -300,19 +306,22 @@ class _InspectorFiles extends StatelessWidget {
     required this.changes,
     required this.history,
     required this.onReview,
+    required this.onRestoreCheckpoint,
     this.onRevert,
   });
 
   final WorkspaceTurnChanges? changes;
   final List<WorkspaceTurnChanges> history;
   final VoidCallback onReview;
+  final ValueChanged<WorkspaceTurnChanges> onRestoreCheckpoint;
   final VoidCallback? onRevert;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final files = changes?.files ?? const <WorkspaceFileChange>[];
-    return ListView(
+    return SilkyListView(
+      silkyConfig: _silkyScrollConfig,
       padding: const EdgeInsets.all(18),
       children: [
         if (files.isEmpty)
@@ -352,13 +361,35 @@ class _InspectorFiles extends StatelessWidget {
         if (history.isNotEmpty) ...[
           const SizedBox(height: 24),
           Text(
-            '${history.length} TURN TERSIMPAN',
+            '${history.length} CHECKPOINT TERSIMPAN',
             style: TextStyle(
               fontFamily: 'Consolas',
               fontSize: 10,
               color: colors.onSurfaceVariant,
             ),
           ),
+          const SizedBox(height: 8),
+          for (final turn in history)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                turn.prompt.isEmpty ? 'Agent turn' : turn.prompt,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11),
+              ),
+              subtitle: Text(
+                '${turn.files.length} file · '
+                '${turn.createdAt.toLocal().toString().substring(0, 16)}',
+                style: const TextStyle(fontFamily: 'Consolas', fontSize: 10),
+              ),
+              trailing: IconButton(
+                tooltip: 'Restore checkpoint',
+                onPressed: () => onRestoreCheckpoint(turn),
+                icon: const Icon(Icons.restore, size: 18),
+              ),
+            ),
         ],
         if (onRevert != null) ...[
           const SizedBox(height: 12),
@@ -392,7 +423,8 @@ class _ChangesReviewDialogState extends State<_ChangesReviewDialog> {
     title: const Text('Review agent changes'),
     content: SizedBox(
       width: 760,
-      child: ListView(
+      child: SilkyListView(
+        silkyConfig: _silkyScrollConfig,
         shrinkWrap: true,
         children: [
           for (final file in widget.changes.files) ...[
@@ -591,7 +623,8 @@ class _EmptyState extends StatelessWidget {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 620;
         final horizontalPadding = compact ? 20.0 : 32.0;
-        return SingleChildScrollView(
+        return SilkySingleChildScrollView(
+          silkyConfig: _silkyScrollConfig,
           padding: EdgeInsets.symmetric(
             horizontal: horizontalPadding,
             vertical: 28,
@@ -735,6 +768,7 @@ class _MessageCard extends StatelessWidget {
       child: Align(
         alignment: user ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
+          key: ValueKey(user ? 'user-message-card' : 'agent-message-card'),
           constraints: const BoxConstraints(maxWidth: 760),
           margin: const EdgeInsets.only(bottom: 18),
           padding: const EdgeInsets.all(16),
@@ -814,6 +848,116 @@ class _MessageCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ConversationLane extends StatelessWidget {
+  const _ConversationLane({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Align(
+    alignment: Alignment.topCenter,
+    child: ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 1040),
+      child: child,
+    ),
+  );
+}
+
+class _GoalBanner extends StatelessWidget {
+  const _GoalBanner({
+    required this.goal,
+    required this.busy,
+    required this.onResume,
+    required this.onPause,
+    required this.onClear,
+  });
+
+  final AgentGoal goal;
+  final bool busy;
+  final VoidCallback onResume;
+  final VoidCallback onPause;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final color = switch (goal.status) {
+      AgentGoalStatus.active => colors.primary,
+      AgentGoalStatus.completed => const Color(0xFF2F9E69),
+      AgentGoalStatus.blocked => colors.error,
+      AgentGoalStatus.paused => const Color(0xFFB7862A),
+      AgentGoalStatus.stopped => colors.onSurfaceVariant,
+    };
+    return Container(
+      key: const ValueKey('goal-banner'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        border: Border(
+          top: BorderSide(color: color.withValues(alpha: 0.22)),
+          bottom: BorderSide(color: color.withValues(alpha: 0.22)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.flag_outlined, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'GOAL ${goal.status.name.toUpperCase()} · '
+                  '${goal.turnCount} TURN',
+                  key: const ValueKey('goal-status'),
+                  style: TextStyle(
+                    color: color,
+                    fontFamily: 'Consolas',
+                    fontWeight: FontWeight.w700,
+                    fontSize: 10,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  goal.objective,
+                  key: const ValueKey('goal-objective'),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: colors.onSurface,
+                    fontSize: 12,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (goal.status == AgentGoalStatus.active)
+            TextButton(
+              key: const ValueKey('goal-pause'),
+              onPressed: onPause,
+              child: Text(busy ? 'STOP' : 'PAUSE'),
+            )
+          else if (goal.canResume)
+            TextButton(
+              key: const ValueKey('goal-resume'),
+              onPressed: busy ? null : onResume,
+              child: const Text('RESUME'),
+            ),
+          IconButton(
+            key: const ValueKey('goal-clear'),
+            tooltip: 'Clear goal',
+            onPressed: busy ? null : onClear,
+            icon: const Icon(Icons.close, size: 17),
+          ),
+        ],
       ),
     );
   }
@@ -1054,7 +1198,8 @@ class _ComposerState extends State<_Composer> {
                 border: Border.all(color: theme.dividerColor),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: SingleChildScrollView(
+              child: SilkySingleChildScrollView(
+                silkyConfig: _silkyScrollConfig,
                 child: LayoutBuilder(
                   builder: (context, constraints) {
                     final columns = constraints.maxWidth >= 480 ? 2 : 1;
@@ -1120,7 +1265,8 @@ class _ComposerState extends State<_Composer> {
             ),
             SizedBox(
               height: 34,
-              child: ListView.separated(
+              child: SilkyListView.separated(
+                silkyConfig: _silkyHorizontalScrollConfig,
                 scrollDirection: Axis.horizontal,
                 itemCount: widget.contextFiles.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 6),

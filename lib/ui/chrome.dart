@@ -46,20 +46,30 @@ class _CommandRail extends StatelessWidget {
     required this.onChat,
     required this.onFiles,
     required this.onSearch,
+    required this.onImages,
+    required this.onBrowser,
     required this.onHistory,
     required this.onAddons,
     required this.onTerminal,
     required this.onSettings,
+    required this.imageGenerationMode,
+    required this.browserMode,
+    required this.chatSelected,
   });
 
   final VoidCallback onNewChat;
   final VoidCallback onChat;
   final VoidCallback onFiles;
   final VoidCallback onSearch;
+  final VoidCallback onImages;
+  final VoidCallback onBrowser;
   final VoidCallback onHistory;
   final VoidCallback onAddons;
   final VoidCallback onTerminal;
   final VoidCallback onSettings;
+  final bool imageGenerationMode;
+  final bool browserMode;
+  final bool chatSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -97,30 +107,58 @@ class _CommandRail extends StatelessWidget {
             ),
           ),
           SizedBox(height: compact ? 5 : 22),
-          _RailAction(
-            icon: Icons.add_comment_outlined,
-            label: 'NEW CHAT',
-            onTap: onNewChat,
+          Expanded(
+            child: SilkySingleChildScrollView(
+              silkyConfig: _silkyScrollConfig,
+              child: Column(
+                children: [
+                  _RailAction(
+                    icon: Icons.add_comment_outlined,
+                    label: 'NEW CHAT',
+                    onTap: onNewChat,
+                  ),
+                  _RailAction(
+                    icon: Icons.chat_bubble_outline,
+                    label: 'CHAT',
+                    selected: chatSelected,
+                    onTap: onChat,
+                  ),
+                  _RailAction(
+                    icon: Icons.image_outlined,
+                    label: 'IMAGES',
+                    selected: imageGenerationMode,
+                    onTap: onImages,
+                  ),
+                  _RailAction(
+                    icon: Icons.travel_explore,
+                    label: 'BROWSER',
+                    selected: browserMode,
+                    onTap: onBrowser,
+                  ),
+                  _RailAction(
+                    icon: Icons.folder_outlined,
+                    label: 'FILES',
+                    onTap: onFiles,
+                  ),
+                  _RailAction(
+                    icon: Icons.search,
+                    label: 'SEARCH',
+                    onTap: onSearch,
+                  ),
+                  _RailAction(
+                    icon: Icons.history,
+                    label: 'HISTORY',
+                    onTap: onHistory,
+                  ),
+                  _RailAction(
+                    icon: Icons.extension_outlined,
+                    label: 'ADD-ONS',
+                    onTap: onAddons,
+                  ),
+                ],
+              ),
+            ),
           ),
-          _RailAction(
-            icon: Icons.chat_bubble_outline,
-            label: 'CHAT',
-            selected: true,
-            onTap: onChat,
-          ),
-          _RailAction(
-            icon: Icons.folder_outlined,
-            label: 'FILES',
-            onTap: onFiles,
-          ),
-          _RailAction(icon: Icons.search, label: 'SEARCH', onTap: onSearch),
-          _RailAction(icon: Icons.history, label: 'HISTORY', onTap: onHistory),
-          _RailAction(
-            icon: Icons.extension_outlined,
-            label: 'ADD-ONS',
-            onTap: onAddons,
-          ),
-          const Spacer(),
           _RailAction(
             icon: Icons.terminal,
             label: 'TERMINAL',
@@ -192,12 +230,16 @@ class _TopWorkspaceBar extends StatelessWidget {
   const _TopWorkspaceBar({
     required this.activeFile,
     required this.searchMode,
+    required this.imageGenerationMode,
+    required this.browserMode,
     required this.terminalVisible,
     required this.inspectorVisible,
     required this.lightMode,
     required this.onExplorer,
     required this.onEditor,
     required this.onTerminal,
+    required this.onImages,
+    required this.onBrowser,
     required this.onInspector,
     required this.onToggleTheme,
     required this.onNotifications,
@@ -206,12 +248,16 @@ class _TopWorkspaceBar extends StatelessWidget {
 
   final String? activeFile;
   final bool searchMode;
+  final bool imageGenerationMode;
+  final bool browserMode;
   final bool terminalVisible;
   final bool inspectorVisible;
   final bool lightMode;
   final VoidCallback onExplorer;
   final VoidCallback? onEditor;
   final VoidCallback onTerminal;
+  final VoidCallback onImages;
+  final VoidCallback onBrowser;
   final VoidCallback onInspector;
   final VoidCallback onToggleTheme;
   final VoidCallback onNotifications;
@@ -241,41 +287,64 @@ class _TopWorkspaceBar extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 18),
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: BoxDecoration(
-              color: colors.onSurface.withValues(alpha: 0.04),
-              border: Border.all(color: theme.dividerColor),
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _WorkspaceTab(
-                  label: 'Explorer',
-                  active: activeFile == null && !searchMode && !terminalVisible,
-                  onTap: onExplorer,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SilkySingleChildScrollView(
+                silkyConfig: _silkyHorizontalScrollConfig,
+                scrollDirection: Axis.horizontal,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: colors.onSurface.withValues(alpha: 0.04),
+                    border: Border.all(color: theme.dividerColor),
+                    borderRadius: BorderRadius.circular(9),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _WorkspaceTab(
+                        label: 'Explorer',
+                        active:
+                            activeFile == null &&
+                            !searchMode &&
+                            !imageGenerationMode &&
+                            !browserMode &&
+                            !terminalVisible,
+                        onTap: onExplorer,
+                      ),
+                      _WorkspaceTab(
+                        label: 'Editor',
+                        active: activeFile != null,
+                        onTap: onEditor,
+                      ),
+                      _WorkspaceTab(
+                        label: 'Images',
+                        active: imageGenerationMode,
+                        onTap: onImages,
+                      ),
+                      _WorkspaceTab(
+                        label: 'Browser',
+                        active: browserMode,
+                        onTap: onBrowser,
+                      ),
+                      _WorkspaceTab(
+                        label: 'Terminal',
+                        active: terminalVisible,
+                        onTap: onTerminal,
+                      ),
+                      _WorkspaceTab(
+                        key: const ValueKey('show-activity-panel'),
+                        label: 'Inspector',
+                        active: inspectorVisible,
+                        onTap: onInspector,
+                      ),
+                    ],
+                  ),
                 ),
-                _WorkspaceTab(
-                  label: 'Editor',
-                  active: activeFile != null,
-                  onTap: onEditor,
-                ),
-                _WorkspaceTab(
-                  label: 'Terminal',
-                  active: terminalVisible,
-                  onTap: onTerminal,
-                ),
-                _WorkspaceTab(
-                  key: const ValueKey('show-activity-panel'),
-                  label: 'Inspector',
-                  active: inspectorVisible,
-                  onTap: onInspector,
-                ),
-              ],
+              ),
             ),
           ),
-          const Spacer(),
           IconButton(
             key: const ValueKey('theme-toggle'),
             tooltip: lightMode ? 'Gunakan mode gelap' : 'Gunakan mode terang',
@@ -674,7 +743,8 @@ class _WorkspaceTreeState extends State<_WorkspaceTree> {
             message: 'Folder kosong',
           );
         }
-        return ListView.builder(
+        return SilkyListView.builder(
+          silkyConfig: _silkyScrollConfig,
           padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
           itemCount: entries.length,
           itemBuilder: (context, index) => _FileTreeEntry(

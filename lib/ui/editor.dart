@@ -387,7 +387,8 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                   ),
                   const VerticalDivider(width: 1),
                   Expanded(
-                    child: ListView(
+                    child: SilkyListView(
+                      silkyConfig: _silkyHorizontalScrollConfig,
                       scrollDirection: Axis.horizontal,
                       children: [
                         for (final item in widget.documents)
@@ -819,7 +820,8 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
                       ),
                     ),
                     Expanded(
-                      child: ListView.builder(
+                      child: SilkyListView.builder(
+                        silkyConfig: _silkyScrollConfig,
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                         itemCount: _debugOutput.length,
                         itemBuilder: (_, index) => SelectableText(
@@ -905,7 +907,8 @@ class _IntegratedTerminal extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: ListView.builder(
+            child: SilkyListView.builder(
+              silkyConfig: _silkyScrollConfig,
               controller: scrollController,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               itemCount: output.length,

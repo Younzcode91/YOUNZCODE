@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kode_agent_desktop/models/chat_entry.dart';
 import 'package:kode_agent_desktop/models/chat_session.dart';
+import 'package:kode_agent_desktop/models/agent_goal.dart';
 import 'package:kode_agent_desktop/services/chat_session_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
@@ -49,6 +50,60 @@ void main() {
     final loaded = await store.load();
     expect(loaded.length, 50);
     expect(loaded.first.id, '54');
+  });
+
+  test('goal persisten disimpan dan dipulihkan bersama chat', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = ChatSessionStore();
+    final goal = AgentGoal(
+      objective: 'Selesaikan refactor dan seluruh test',
+      status: AgentGoalStatus.paused,
+      turnCount: 3,
+      updatedAt: DateTime(2026, 7, 29),
+      lastDetail: 'Menunggu batch berikutnya.',
+    );
+    await store.save([
+      ChatSession(
+        id: 'goal-chat',
+        workspace: 'C:/project',
+        updatedAt: DateTime(2026, 7, 29),
+        entries: const [
+          ChatEntry(role: ChatRole.user, content: '/goal refactor'),
+        ],
+        goal: goal,
+      ),
+    ]);
+
+    final restored = (await store.load()).single.goal!;
+    expect(restored.objective, goal.objective);
+    expect(restored.status, AgentGoalStatus.paused);
+    expect(restored.turnCount, 3);
+    expect(restored.lastDetail, 'Menunggu batch berikutnya.');
+  });
+
+  test('secret di objective goal tidak disimpan mentah', () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = ChatSessionStore();
+    const secret = 'sk-goal-secret-abcdefghijklmnopqrstuvwxyz';
+    await store.save([
+      ChatSession(
+        id: 'secret-goal',
+        workspace: 'C:/project',
+        updatedAt: DateTime(2026, 7, 29),
+        entries: const [ChatEntry(role: ChatRole.user, content: 'Goal aman')],
+        goal: AgentGoal(
+          objective: 'Uji provider dengan $secret',
+          status: AgentGoalStatus.paused,
+          turnCount: 1,
+          updatedAt: DateTime(2026, 7, 29),
+        ),
+      ),
+    ]);
+
+    final preferences = await SharedPreferences.getInstance();
+    final persisted = preferences.getString('chat_sessions_v1')!;
+    expect(persisted, isNot(contains(secret)));
+    expect((await store.load()).single.goal, isNotNull);
   });
 
   test('checkpoint pesan internal agent tersimpan dan dipulihkan', () async {

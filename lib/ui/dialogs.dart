@@ -9,12 +9,20 @@ class _ModelDialog extends StatefulWidget {
     required this.apiKey,
     required this.models,
     required this.selectedModel,
+    required this.fallbackBaseUrls,
+    required this.inputCostPerMillion,
+    required this.outputCostPerMillion,
+    required this.monthlyTokenBudget,
   });
 
   final String baseUrl;
   final String apiKey;
   final List<String> models;
   final String selectedModel;
+  final List<String> fallbackBaseUrls;
+  final double inputCostPerMillion;
+  final double outputCostPerMillion;
+  final int monthlyTokenBudget;
 
   @override
   State<_ModelDialog> createState() => _ModelDialogState();
@@ -24,6 +32,18 @@ class _ModelDialogState extends State<_ModelDialog> {
   late final _baseController = TextEditingController(text: widget.baseUrl);
   late final _keyController = TextEditingController(text: widget.apiKey);
   final _newModelController = TextEditingController();
+  late final _fallbackController = TextEditingController(
+    text: widget.fallbackBaseUrls.join('\n'),
+  );
+  late final _inputCostController = TextEditingController(
+    text: '${widget.inputCostPerMillion}',
+  );
+  late final _outputCostController = TextEditingController(
+    text: '${widget.outputCostPerMillion}',
+  );
+  late final _budgetController = TextEditingController(
+    text: '${widget.monthlyTokenBudget}',
+  );
   late final List<String> _models = [...widget.models];
   late String _selectedModel = widget.selectedModel;
   late String _providerLabel = _presetForBaseUrl(widget.baseUrl).label;
@@ -42,6 +62,10 @@ class _ModelDialogState extends State<_ModelDialog> {
     _baseController.dispose();
     _keyController.dispose();
     _newModelController.dispose();
+    _fallbackController.dispose();
+    _inputCostController.dispose();
+    _outputCostController.dispose();
+    _budgetController.dispose();
     super.dispose();
   }
 
@@ -76,15 +100,25 @@ class _ModelDialogState extends State<_ModelDialog> {
   Future<void> _fetchModels() async {
     final baseUrl = _baseController.text.trim();
     if (baseUrl.isEmpty || _fetchingModels) return;
+    final apiKey = _keyController.text.trim();
+    final uri = Uri.tryParse(baseUrl);
+    final localProvider =
+        uri != null &&
+        {'localhost', '127.0.0.1', '::1'}.contains(uri.host.toLowerCase());
+    if (apiKey.isEmpty && !localProvider) {
+      setState(() {
+        _fetchError =
+            'Isi API KEY terlebih dahulu. Provider internet biasanya menolak '
+            'endpoint /models tanpa Authorization.';
+      });
+      return;
+    }
     setState(() {
       _fetchingModels = true;
       _fetchError = null;
     });
     try {
-      final fetched = await fetchProviderModels(
-        baseUrl,
-        _keyController.text.trim(),
-      );
+      final fetched = await fetchProviderModels(baseUrl, apiKey);
       if (!mounted) return;
       setState(() {
         if (fetched.isEmpty) {
@@ -124,6 +158,16 @@ class _ModelDialogState extends State<_ModelDialog> {
         apiKey: _keyController.text.trim(),
         models: _models,
         selectedModel: _selectedModel,
+        fallbackBaseUrls: _fallbackController.text
+            .split(RegExp(r'\r?\n'))
+            .map((item) => item.trim())
+            .where((item) => item.isNotEmpty)
+            .toList(),
+        inputCostPerMillion:
+            double.tryParse(_inputCostController.text.trim()) ?? 0,
+        outputCostPerMillion:
+            double.tryParse(_outputCostController.text.trim()) ?? 0,
+        monthlyTokenBudget: int.tryParse(_budgetController.text.trim()) ?? 0,
       ),
     );
   }
@@ -139,11 +183,13 @@ class _ModelDialogState extends State<_ModelDialog> {
         borderRadius: BorderRadius.circular(14),
       ),
       child: ConstrainedBox(
+        key: const ValueKey('model-dialog-panel'),
         constraints: BoxConstraints(
           maxWidth: 560,
           maxHeight: MediaQuery.sizeOf(context).height - 64,
         ),
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -170,10 +216,10 @@ class _ModelDialogState extends State<_ModelDialog> {
                 ],
               ),
             ),
-            Expanded(
-              child: SingleChildScrollView(
+            Flexible(
+              child: SilkySingleChildScrollView(
                 key: const ValueKey('model-dialog-scroll'),
-                primary: true,
+                silkyConfig: _silkyScrollConfig,
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,6 +281,43 @@ class _ModelDialogState extends State<_ModelDialog> {
                       ),
                     ),
                     const SizedBox(height: 18),
+                    const _FieldLabel('FALLBACK BASE URLS'),
+                    TextField(
+                      controller: _fallbackController,
+                      minLines: 2,
+                      maxLines: 4,
+                      decoration: const InputDecoration(
+                        hintText: 'One HTTPS or loopback URL per line',
+                        helperText:
+                            'Used in order after retryable provider failures.',
+                      ),
+                      style: const TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const _FieldLabel('API KEY'),
+                    TextField(
+                      key: const ValueKey('model-api-key-field'),
+                      controller: _keyController,
+                      obscureText: true,
+                      style: const TextStyle(
+                        fontFamily: 'Consolas',
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Isi API key sebelum Fetch. Key hanya disimpan di memori '
+                      'dan tidak ditulis ke disk.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontStyle: FontStyle.italic,
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
                     Row(
                       children: [
                         const _FieldLabel('AVAILABLE MODELS'),
@@ -273,7 +356,8 @@ class _ModelDialogState extends State<_ModelDialog> {
                         color: colors.surface,
                         border: Border.all(color: theme.dividerColor),
                       ),
-                      child: ListView.separated(
+                      child: SilkyListView.separated(
+                        silkyConfig: _silkyScrollConfig,
                         shrinkWrap: true,
                         itemCount: _models.length,
                         separatorBuilder: (_, _) => const Divider(height: 1),
@@ -340,23 +424,36 @@ class _ModelDialogState extends State<_ModelDialog> {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    const _FieldLabel('API KEY'),
-                    TextField(
-                      key: const ValueKey('model-api-key-field'),
-                      controller: _keyController,
-                      obscureText: true,
-                      style: const TextStyle(
-                        fontFamily: 'Consolas',
-                        fontSize: 13,
-                      ),
+                    const _FieldLabel('USAGE & COST ESTIMATION'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _inputCostController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Input USD / 1M',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            controller: _outputCostController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Output USD / 1M',
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
-                    Text(
-                      'Your API key is kept in memory and is not stored on disk.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontStyle: FontStyle.italic,
-                        color: colors.onSurfaceVariant,
+                    TextField(
+                      controller: _budgetController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Monthly token budget (0 = unlimited)',
                       ),
                     ),
                   ],
@@ -405,12 +502,20 @@ class _ModelSettingsResult {
     required this.apiKey,
     required this.models,
     required this.selectedModel,
+    required this.fallbackBaseUrls,
+    required this.inputCostPerMillion,
+    required this.outputCostPerMillion,
+    required this.monthlyTokenBudget,
   });
 
   final String baseUrl;
   final String apiKey;
   final List<String> models;
   final String selectedModel;
+  final List<String> fallbackBaseUrls;
+  final double inputCostPerMillion;
+  final double outputCostPerMillion;
+  final int monthlyTokenBudget;
 }
 
 class _FieldLabel extends StatelessWidget {
@@ -533,7 +638,8 @@ class _PermissionDialog extends StatelessWidget {
                 border: Border.all(color: cs.outline),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: SingleChildScrollView(
+              child: SilkySingleChildScrollView(
+                silkyConfig: _silkyScrollConfig,
                 child: SelectableText(
                   detail,
                   style: TextStyle(
@@ -846,6 +952,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
     required this.workspace,
     required this.allowWrite,
     required this.allowTerminal,
+    required this.qualityGateEnabled,
     required this.approvalMode,
     required this.environment,
     required this.baseUrl,
@@ -859,6 +966,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
   final String workspace;
   final bool allowWrite;
   final bool allowTerminal;
+  final bool qualityGateEnabled;
   final ApprovalMode approvalMode;
   final Map<String, String> environment;
   final String baseUrl;
@@ -869,6 +977,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
   final Future<void> Function(
     bool allowWrite,
     bool allowTerminal,
+    bool qualityGateEnabled,
     ApprovalMode approvalMode,
     Map<String, String> environment,
     _ApiConfiguration api,
@@ -882,6 +991,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
 class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
   late bool _allowWrite = widget.allowWrite;
   late bool _allowTerminal = widget.allowTerminal;
+  late bool _qualityGateEnabled = widget.qualityGateEnabled;
   late ApprovalMode _approvalMode = widget.approvalMode;
   late final _projectController = TextEditingController(
     text: widget.workspace.isEmpty ? 'No workspace selected' : widget.workspace,
@@ -920,6 +1030,7 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
     await widget.onSave(
       _allowWrite,
       _allowTerminal,
+      _qualityGateEnabled,
       _approvalMode,
       _environment,
       _apiConfiguration,
@@ -1081,8 +1192,9 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
                     child: child,
                   ),
                 ),
-                child: SingleChildScrollView(
+                child: SilkySingleChildScrollView(
                   key: ValueKey(_tab),
+                  silkyConfig: _silkyScrollConfig,
                   padding: const EdgeInsets.all(24),
                   child: _content(),
                 ),
@@ -1253,6 +1365,13 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
             'Allow the agent to run PowerShell commands in the workspace.',
         value: _allowTerminal,
         onChanged: (value) => setState(() => _allowTerminal = value),
+      ),
+      _PermissionSetting(
+        title: 'AUTOMATIC QUALITY GATE',
+        description:
+            'Run language checks and relevant tests after accepted agent changes.',
+        value: _qualityGateEnabled,
+        onChanged: (value) => setState(() => _qualityGateEnabled = value),
       ),
       const _PermissionSetting(
         title: 'NETWORK ACCESS',
@@ -1771,6 +1890,9 @@ class _AddonManagerDialog extends StatefulWidget {
     required this.onImportFolder,
     required this.onToggle,
     required this.onRemove,
+    required this.onCheckMcp,
+    required this.toolPermissionPolicies,
+    required this.onToolPermissionChanged,
   });
 
   final List<Addon> addons;
@@ -1778,6 +1900,10 @@ class _AddonManagerDialog extends StatefulWidget {
   final Future<void> Function() onImportFolder;
   final Future<void> Function(Addon addon, bool enabled) onToggle;
   final Future<void> Function(Addon addon) onRemove;
+  final Future<List<McpHealth>> Function(Addon addon) onCheckMcp;
+  final Map<String, ToolPermissionPolicy> toolPermissionPolicies;
+  final Future<void> Function(String pattern, ToolPermissionPolicy policy)
+  onToolPermissionChanged;
 
   @override
   State<_AddonManagerDialog> createState() => _AddonManagerDialogState();
@@ -1785,6 +1911,25 @@ class _AddonManagerDialog extends StatefulWidget {
 
 class _AddonManagerDialogState extends State<_AddonManagerDialog> {
   late final List<Addon> _addons = [...widget.addons];
+  final _checkingMcp = <String>{};
+
+  Future<void> _showMcpHealth(Addon addon) async {
+    setState(() => _checkingMcp.add(addon.id));
+    try {
+      final health = await widget.onCheckMcp(addon);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (context) => _McpHealthDialog(
+          health: health,
+          policies: widget.toolPermissionPolicies,
+          onPermissionChanged: widget.onToolPermissionChanged,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _checkingMcp.remove(addon.id));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1849,7 +1994,8 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
                         style: TextStyle(color: cs.onSurfaceVariant),
                       ),
                     )
-                  : ListView.separated(
+                  : SilkyListView.separated(
+                      silkyConfig: _silkyScrollConfig,
                       padding: const EdgeInsets.all(14),
                       itemCount: _addons.length,
                       separatorBuilder: (_, _) => const SizedBox(height: 8),
@@ -1899,6 +2045,24 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
                                   ],
                                 ),
                               ),
+                              if (addon.kind == AddonKind.mcpServer)
+                                IconButton(
+                                  tooltip: 'MCP health and permissions',
+                                  onPressed: _checkingMcp.contains(addon.id)
+                                      ? null
+                                      : () => _showMcpHealth(addon),
+                                  icon: _checkingMcp.contains(addon.id)
+                                      ? const SizedBox.square(
+                                          dimension: 16,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Icon(
+                                          Icons.monitor_heart_outlined,
+                                          size: 18,
+                                        ),
+                                ),
                               Switch(
                                 value: addon.enabled,
                                 onChanged: (value) async {
@@ -1967,6 +2131,166 @@ class _AddonManagerDialogState extends State<_AddonManagerDialog> {
   };
 }
 
+class _McpHealthDialog extends StatefulWidget {
+  const _McpHealthDialog({
+    required this.health,
+    required this.policies,
+    required this.onPermissionChanged,
+  });
+
+  final List<McpHealth> health;
+  final Map<String, ToolPermissionPolicy> policies;
+  final Future<void> Function(String pattern, ToolPermissionPolicy policy)
+  onPermissionChanged;
+
+  @override
+  State<_McpHealthDialog> createState() => _McpHealthDialogState();
+}
+
+class _McpHealthDialogState extends State<_McpHealthDialog> {
+  late final Map<String, ToolPermissionPolicy> _policies = {...widget.policies};
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Dialog(
+      child: SizedBox(
+        width: 760,
+        height: 620,
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.monitor_heart_outlined),
+              title: const Text('MCP HEALTH & PERMISSIONS'),
+              subtitle: const Text(
+                'Policies are stored per workspace and tool.',
+              ),
+              trailing: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SilkyListView(
+                silkyConfig: _silkyScrollConfig,
+                padding: const EdgeInsets.all(16),
+                children: [
+                  for (final server in widget.health) ...[
+                    Row(
+                      children: [
+                        Icon(
+                          server.healthy
+                              ? Icons.check_circle_outline
+                              : Icons.error_outline,
+                          size: 18,
+                          color: server.healthy
+                              ? const Color(0xFF2F9E69)
+                              : colors.error,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            server.serverName,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Text(
+                          '${server.transport.name.toUpperCase()} · '
+                          '${server.latency.inMilliseconds} ms · '
+                          '${server.tools.length} tools',
+                          style: const TextStyle(
+                            fontFamily: 'Consolas',
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (server.error.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          server.error,
+                          style: TextStyle(color: colors.error),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    for (final tool in server.tools)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.build_outlined, size: 16),
+                        title: Text(
+                          tool.name,
+                          style: const TextStyle(fontFamily: 'Consolas'),
+                        ),
+                        subtitle: Text(
+                          tool.description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: DropdownButton<ToolPermissionPolicy>(
+                          value:
+                              _policies['mcp:${server.serverName}/${tool.name}'] ??
+                              ToolPermissionPolicy.ask,
+                          items: const [
+                            DropdownMenuItem(
+                              value: ToolPermissionPolicy.ask,
+                              child: Text('ASK'),
+                            ),
+                            DropdownMenuItem(
+                              value: ToolPermissionPolicy.allow,
+                              child: Text('ALLOW'),
+                            ),
+                            DropdownMenuItem(
+                              value: ToolPermissionPolicy.deny,
+                              child: Text('DENY'),
+                            ),
+                          ],
+                          onChanged: (policy) async {
+                            if (policy == null) return;
+                            final pattern =
+                                'mcp:${server.serverName}/${tool.name}';
+                            await widget.onPermissionChanged(pattern, policy);
+                            if (mounted) {
+                              setState(() => _policies[pattern] = policy);
+                            }
+                          },
+                        ),
+                      ),
+                    ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: const Text(
+                        'CONNECTION LOG',
+                        style: TextStyle(fontSize: 10),
+                      ),
+                      children: [
+                        SizedBox(
+                          width: double.infinity,
+                          child: SelectableText(
+                            server.logs.isEmpty
+                                ? 'No log entries.'
+                                : server.logs.join('\n'),
+                            style: const TextStyle(
+                              fontFamily: 'Consolas',
+                              fontSize: 10,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 28),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ChatHistoryDialog extends StatelessWidget {
   const _ChatHistoryDialog({
     required this.sessions,
@@ -2001,7 +2325,8 @@ class _ChatHistoryDialog extends StatelessWidget {
                   style: TextStyle(color: cs.onSurfaceVariant),
                 ),
               )
-            : ListView.separated(
+            : SilkyListView.separated(
+                silkyConfig: _silkyScrollConfig,
                 itemCount: sessions.length,
                 separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) {
@@ -2089,6 +2414,27 @@ class _SearchView extends StatelessWidget {
                       letterSpacing: 1,
                     ),
                   ),
+                  const SizedBox(width: 10),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: cs.primary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      child: Text(
+                        'HYBRID INDEX',
+                        style: TextStyle(
+                          color: cs.primary,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ),
                   const Spacer(),
                   IconButton(onPressed: onClose, icon: const Icon(Icons.close)),
                 ],
@@ -2134,7 +2480,8 @@ class _SearchView extends StatelessWidget {
                     ),
                   ),
                 )
-              : ListView.builder(
+              : SilkyListView.builder(
+                  silkyConfig: _silkyScrollConfig,
                   padding: const EdgeInsets.all(24),
                   itemCount: results.length,
                   itemBuilder: (context, index) {
@@ -2261,7 +2608,8 @@ class _QuickFileDialogState extends State<_QuickFileDialog> {
               ),
             ),
             Expanded(
-              child: ListView.builder(
+              child: SilkyListView.builder(
+                silkyConfig: _silkyScrollConfig,
                 itemCount: matches.length,
                 itemBuilder: (context, index) => ListTile(
                   dense: true,
@@ -2296,6 +2644,8 @@ class _CommandPaletteDialog extends StatelessWidget {
       ('file', Icons.file_open_outlined, 'Open File'),
       ('chat', Icons.add_comment_outlined, 'New Chat'),
       ('search', Icons.manage_search, 'Search Workspace'),
+      ('images', Icons.image_outlined, 'Image Generation'),
+      ('browser', Icons.travel_explore, 'Agent Browser'),
       ('terminal', Icons.terminal, 'Toggle Terminal'),
       ('settings', Icons.tune, 'Project Settings'),
       ('model', Icons.psychology_outlined, 'Switch Model'),
@@ -2328,16 +2678,16 @@ class _CommandPaletteDialog extends StatelessWidget {
 
 class _GitDialog extends StatefulWidget {
   const _GitDialog({
-    required this.status,
-    required this.diff,
-    required this.history,
-    required this.onCreateBranch,
+    required this.service,
+    required this.workspace,
+    required this.onChanged,
+    required this.onOpenFile,
   });
 
-  final GitStatus status;
-  final String diff;
-  final String history;
-  final Future<void> Function(String name) onCreateBranch;
+  final GitService service;
+  final String workspace;
+  final Future<void> Function() onChanged;
+  final ValueChanged<String> onOpenFile;
 
   @override
   State<_GitDialog> createState() => _GitDialogState();
@@ -2345,111 +2695,463 @@ class _GitDialog extends StatefulWidget {
 
 class _GitDialogState extends State<_GitDialog> {
   final _branchController = TextEditingController();
+  final _commitController = TextEditingController();
+  GitStatus _status = const GitStatus(isRepository: true);
+  List<String> _branches = const [];
+  List<GitWorktree> _worktrees = const [];
+  String _diff = '';
+  String _history = '';
   String? _branchError;
+  String? _operationError;
+  bool _loading = true;
+  bool _mutating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
 
   @override
   void dispose() {
     _branchController.dispose();
+    _commitController.dispose();
     super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() => _loading = true);
+    try {
+      final values = await Future.wait([
+        widget.service.status(widget.workspace),
+        widget.service.diff(widget.workspace),
+        widget.service.history(widget.workspace),
+        widget.service.branches(widget.workspace),
+        widget.service.worktrees(widget.workspace),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _status = values[0] as GitStatus;
+        _diff = values[1] as String;
+        _history = values[2] as String;
+        _branches = values[3] as List<String>;
+        _worktrees = values[4] as List<GitWorktree>;
+        _loading = false;
+        _operationError = null;
+      });
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _operationError = '$error';
+        });
+      }
+    }
+  }
+
+  Future<void> _run(
+    Future<void> Function() action, {
+    bool clearCommit = false,
+  }) async {
+    if (_mutating) return;
+    setState(() {
+      _mutating = true;
+      _operationError = null;
+    });
+    try {
+      await action();
+      if (clearCommit) _commitController.clear();
+      await widget.onChanged();
+      await _refresh();
+    } catch (error) {
+      if (mounted) setState(() => _operationError = '$error');
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  Future<void> _discard(GitFileStatus entry) async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Discard file changes?'),
+        content: Text(
+          entry.untracked
+              ? '${entry.path} akan dihapus permanen.'
+              : '${entry.path} akan dikembalikan ke versi repository.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('DISCARD'),
+          ),
+        ],
+      ),
+    );
+    if (approved == true) {
+      await _run(() => widget.service.discard(widget.workspace, entry));
+    }
+  }
+
+  Future<void> _push() async {
+    final approved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Push branch?'),
+        content: Text(
+          'Push "${_status.branch}" ke remote "origin"? Ini mengubah '
+          'repository remote.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('CANCEL'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('PUSH'),
+          ),
+        ],
+      ),
+    );
+    if (approved == true) {
+      await _run(() => widget.service.pushCurrent(widget.workspace));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Dialog(
       child: SizedBox(
-        width: 900,
-        height: 680,
+        width: 980,
+        height: 720,
         child: DefaultTabController(
-          length: 3,
+          length: 4,
           child: Column(
             children: [
               ListTile(
                 leading: const Icon(Icons.account_tree_outlined),
-                title: Text(widget.status.branch),
+                title: Text(_status.branch.isEmpty ? 'Git' : _status.branch),
                 subtitle: Text(
-                  widget.status.dirty
-                      ? '${widget.status.files.length} changed files'
+                  _status.dirty
+                      ? '${_status.entries.length} changed files'
                       : 'Working tree clean',
                 ),
-                trailing: IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ),
-              const TabBar(
-                tabs: [
-                  Tab(text: 'STATUS'),
-                  Tab(text: 'DIFF'),
-                  Tab(text: 'HISTORY'),
-                ],
-              ),
-              Expanded(
-                child: TabBarView(
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        for (final file in widget.status.files.entries)
-                          ListTile(
-                            dense: true,
-                            leading: Text(file.value),
-                            title: Text(
-                              file.key,
-                              style: const TextStyle(fontFamily: 'Consolas'),
-                            ),
-                          ),
-                        const Divider(),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _branchController,
-                                decoration: InputDecoration(
-                                  labelText: 'New branch name',
-                                  errorText: _branchError,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            FilledButton(
-                              onPressed: () async {
-                                final name = _branchController.text.trim();
-                                if (name.isEmpty) {
-                                  setState(
-                                    () => _branchError =
-                                        'Nama branch tidak boleh kosong.',
-                                  );
-                                  return;
-                                }
-                                try {
-                                  await widget.onCreateBranch(name);
-                                  if (context.mounted) Navigator.pop(context);
-                                } catch (error) {
-                                  if (mounted) {
-                                    setState(
-                                      () => _branchError =
-                                          'Gagal membuat branch: $error',
-                                    );
-                                  }
-                                }
-                              },
-                              child: const Text('CREATE BRANCH'),
-                            ),
-                          ],
-                        ),
-                      ],
+                    IconButton(
+                      tooltip: 'Refresh',
+                      onPressed: _mutating ? null : _refresh,
+                      icon: const Icon(Icons.refresh),
                     ),
-                    _CodeOutput(widget.diff.isEmpty ? 'No diff.' : widget.diff),
-                    _CodeOutput(
-                      widget.history.isEmpty ? 'No commits.' : widget.history,
+                    IconButton(
+                      tooltip: 'Push current branch',
+                      onPressed: _mutating ? null : _push,
+                      icon: const Icon(Icons.cloud_upload_outlined),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
                     ),
                   ],
                 ),
+              ),
+              if (_operationError != null)
+                Container(
+                  width: double.infinity,
+                  color: colors.error.withValues(alpha: 0.12),
+                  padding: const EdgeInsets.all(10),
+                  child: Text(
+                    _operationError!,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: colors.error),
+                  ),
+                ),
+              const TabBar(
+                tabs: [
+                  Tab(text: 'CHANGES'),
+                  Tab(text: 'DIFF'),
+                  Tab(text: 'HISTORY'),
+                  Tab(text: 'BRANCHES'),
+                ],
+              ),
+              Expanded(
+                child: _loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : TabBarView(
+                        children: [
+                          _changesTab(),
+                          _CodeOutput(_diff.isEmpty ? 'No diff.' : _diff),
+                          _CodeOutput(
+                            _history.isEmpty ? 'No commits.' : _history,
+                          ),
+                          _branchesTab(),
+                        ],
+                      ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _changesTab() {
+    return SilkyListView(
+      silkyConfig: _silkyScrollConfig,
+      padding: const EdgeInsets.all(16),
+      children: [
+        if (_status.entries.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(24),
+            child: Center(child: Text('WORKING TREE CLEAN')),
+          ),
+        for (final entry in _status.entries)
+          ListTile(
+            dense: true,
+            leading: SizedBox(
+              width: 30,
+              child: Text(
+                '${entry.indexStatus}${entry.workTreeStatus}',
+                style: TextStyle(
+                  fontFamily: 'Consolas',
+                  fontWeight: FontWeight.bold,
+                  color: entry.conflicted
+                      ? Theme.of(context).colorScheme.error
+                      : Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ),
+            title: Text(
+              entry.path,
+              style: const TextStyle(fontFamily: 'Consolas'),
+            ),
+            subtitle: entry.conflicted
+                ? const Text(
+                    'CONFLICT — edit file, lalu stage sebagai resolved',
+                  )
+                : Text(entry.staged ? 'STAGED' : 'UNSTAGED'),
+            onTap: () => widget.onOpenFile(entry.path),
+            trailing: Wrap(
+              spacing: 2,
+              children: [
+                IconButton(
+                  tooltip: entry.staged ? 'Unstage' : 'Stage',
+                  onPressed: _mutating
+                      ? null
+                      : () => _run(
+                          () => entry.staged
+                              ? widget.service.unstage(widget.workspace, [
+                                  entry.path,
+                                ])
+                              : widget.service.stage(widget.workspace, [
+                                  entry.path,
+                                ]),
+                        ),
+                  icon: Icon(
+                    entry.staged
+                        ? Icons.remove_circle_outline
+                        : Icons.add_circle_outline,
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Discard',
+                  onPressed: _mutating ? null : () => _discard(entry),
+                  icon: const Icon(Icons.undo),
+                ),
+              ],
+            ),
+          ),
+        if (_status.entries.isNotEmpty) ...[
+          const Divider(),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: _mutating
+                    ? null
+                    : () => _run(
+                        () => widget.service.stage(
+                          widget.workspace,
+                          _status.entries.map((entry) => entry.path),
+                        ),
+                      ),
+                child: const Text('STAGE ALL'),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                onPressed: _mutating || !_status.hasStaged
+                    ? null
+                    : () => _run(
+                        () => widget.service.unstage(
+                          widget.workspace,
+                          _status.entries
+                              .where((entry) => entry.staged)
+                              .map((entry) => entry.path),
+                        ),
+                      ),
+                child: const Text('UNSTAGE ALL'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _commitController,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Commit message',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _mutating || !_status.hasStaged
+                    ? null
+                    : () => _run(
+                        () => widget.service.commit(
+                          widget.workspace,
+                          _commitController.text,
+                        ),
+                        clearCommit: true,
+                      ),
+                icon: const Icon(Icons.commit),
+                label: const Text('COMMIT'),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _branchesTab() {
+    return SilkyListView(
+      silkyConfig: _silkyScrollConfig,
+      padding: const EdgeInsets.all(16),
+      children: [
+        TextField(
+          controller: _branchController,
+          decoration: InputDecoration(
+            labelText: 'Branch name',
+            errorText: _branchError,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton(
+              onPressed: _mutating
+                  ? null
+                  : () => _run(
+                      () => widget.service.createBranch(
+                        widget.workspace,
+                        _branchController.text.trim(),
+                      ),
+                    ),
+              child: const Text('CREATE'),
+            ),
+            OutlinedButton(
+              onPressed: _mutating
+                  ? null
+                  : () => _run(
+                      () => widget.service.switchBranch(
+                        widget.workspace,
+                        _branchController.text.trim(),
+                      ),
+                    ),
+              child: const Text('SWITCH'),
+            ),
+            OutlinedButton(
+              onPressed: _mutating
+                  ? null
+                  : () => _run(
+                      () => widget.service.mergeBranch(
+                        widget.workspace,
+                        _branchController.text.trim(),
+                      ),
+                    ),
+              child: const Text('MERGE INTO CURRENT'),
+            ),
+            if (_status.conflicts.isNotEmpty)
+              TextButton(
+                onPressed: _mutating
+                    ? null
+                    : () => _run(
+                        () => widget.service.abortMerge(widget.workspace),
+                      ),
+                child: const Text('ABORT MERGE'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 20),
+        const Text(
+          'LOCAL BRANCHES',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+        ),
+        for (final branch in _branches)
+          ListTile(
+            dense: true,
+            leading: Icon(
+              branch == _status.branch
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_unchecked,
+              size: 16,
+            ),
+            title: Text(branch, style: const TextStyle(fontFamily: 'Consolas')),
+            onTap: branch == _status.branch
+                ? null
+                : () {
+                    _branchController.text = branch;
+                  },
+          ),
+        const Divider(),
+        const Text(
+          'WORKTREES',
+          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+        ),
+        for (final worktree in _worktrees)
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.account_tree, size: 16),
+            title: Text(
+              worktree.branch.isEmpty ? worktree.head : worktree.branch,
+              style: const TextStyle(fontFamily: 'Consolas'),
+            ),
+            subtitle: Text(
+              worktree.path,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing:
+                worktree.path == widget.workspace ||
+                    !worktree.branch.startsWith('codex/agent-')
+                ? null
+                : IconButton(
+                    tooltip: 'Remove agent worktree',
+                    onPressed: _mutating
+                        ? null
+                        : () => _run(
+                            () => widget.service.removeWorktree(
+                              widget.workspace,
+                              worktree,
+                            ),
+                          ),
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+          ),
+      ],
     );
   }
 }
@@ -2459,11 +3161,421 @@ class _CodeOutput extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) => SingleChildScrollView(
+  Widget build(BuildContext context) => SilkySingleChildScrollView(
+    silkyConfig: _silkyScrollConfig,
     padding: const EdgeInsets.all(16),
     child: SelectableText(
       value,
       style: const TextStyle(fontFamily: 'Consolas', fontSize: 11, height: 1.4),
     ),
   );
+}
+
+class _ProviderUsageDialog extends StatelessWidget {
+  const _ProviderUsageDialog({
+    required this.records,
+    required this.monthlyTokenBudget,
+    required this.onClear,
+  });
+
+  final List<ProviderUsageRecord> records;
+  final int monthlyTokenBudget;
+  final Future<void> Function() onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+    final monthly = ProviderUsageStore.summarize(
+      records,
+      since: DateTime(now.year, now.month),
+    );
+    final allTime = ProviderUsageStore.summarize(records);
+    final budgetProgress = monthlyTokenBudget <= 0
+        ? 0.0
+        : (monthly.totalTokens / monthlyTokenBudget).clamp(0.0, 1.0);
+    return Dialog(
+      child: SizedBox(
+        width: 840,
+        height: 650,
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.query_stats),
+              title: const Text('PROVIDER USAGE'),
+              subtitle: const Text(
+                'Cost is an estimate based on the rates in Model Settings.',
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextButton(
+                    onPressed: records.isEmpty
+                        ? null
+                        : () async {
+                            final approved = await showDialog<bool>(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                title: const Text('Clear usage history?'),
+                                content: const Text(
+                                  'Semua riwayat token untuk workspace ini '
+                                  'akan dihapus.',
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, false),
+                                    child: const Text('CANCEL'),
+                                  ),
+                                  FilledButton(
+                                    onPressed: () =>
+                                        Navigator.pop(context, true),
+                                    child: const Text('CLEAR'),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (approved == true) {
+                              await onClear();
+                              if (context.mounted) Navigator.pop(context);
+                            }
+                          },
+                    child: const Text('CLEAR'),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SilkyListView(
+                silkyConfig: _silkyScrollConfig,
+                padding: const EdgeInsets.all(18),
+                children: [
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      _UsageMetric(
+                        label: 'THIS MONTH',
+                        value: '${monthly.totalTokens} tokens',
+                      ),
+                      _UsageMetric(
+                        label: 'INPUT / OUTPUT',
+                        value:
+                            '${monthly.promptTokens} / '
+                            '${monthly.completionTokens}',
+                      ),
+                      _UsageMetric(
+                        label: 'ESTIMATED COST',
+                        value:
+                            '\$${monthly.estimatedCostUsd.toStringAsFixed(4)}',
+                      ),
+                      _UsageMetric(
+                        label: 'ALL TIME',
+                        value: '${allTime.totalTokens} tokens',
+                      ),
+                    ],
+                  ),
+                  if (monthlyTokenBudget > 0) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        const Text(
+                          'MONTHLY BUDGET',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '${monthly.totalTokens} / $monthlyTokenBudget',
+                          style: const TextStyle(
+                            fontFamily: 'Consolas',
+                            fontSize: 10,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: budgetProgress,
+                      color: budgetProgress >= 0.8
+                          ? colors.error
+                          : colors.primary,
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  const Text(
+                    'USAGE BY ROUTE',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  for (final entry in monthly.byRoute.entries)
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(entry.key),
+                      trailing: Text(
+                        '${entry.value}',
+                        style: const TextStyle(fontFamily: 'Consolas'),
+                      ),
+                    ),
+                  const Divider(height: 28),
+                  const Text(
+                    'RECENT REQUESTS',
+                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                  for (final record in records.take(100))
+                    ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${record.model} · '
+                        '${Uri.tryParse(record.baseUrl)?.host ?? record.baseUrl}',
+                      ),
+                      subtitle: Text(
+                        record.timestamp.toLocal().toString(),
+                        style: const TextStyle(
+                          fontFamily: 'Consolas',
+                          fontSize: 10,
+                        ),
+                      ),
+                      trailing: Text(
+                        '${record.totalTokens} · '
+                        '\$${record.estimatedCostUsd.toStringAsFixed(4)}',
+                        style: const TextStyle(fontFamily: 'Consolas'),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UsageMetric extends StatelessWidget {
+  const _UsageMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 185,
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.04),
+      border: Border.all(color: Theme.of(context).dividerColor),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 9)),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: const TextStyle(
+            fontFamily: 'Consolas',
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _QualityGateDialog extends StatelessWidget {
+  const _QualityGateDialog({required this.result});
+
+  final QualityGateResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return AlertDialog(
+      icon: Icon(Icons.rule_folder_outlined, color: colors.error),
+      title: const Text('Quality gate failed'),
+      content: SizedBox(
+        width: 760,
+        height: 460,
+        child: SilkyListView(
+          silkyConfig: _silkyScrollConfig,
+          children: [
+            const Text(
+              'Perubahan sudah diterapkan dan memiliki checkpoint. '
+              'Tinjau hasil berikut sebelum memilih keep atau revert.',
+            ),
+            const SizedBox(height: 14),
+            for (final check in result.checks) ...[
+              Row(
+                children: [
+                  Icon(
+                    check.passed
+                        ? Icons.check_circle_outline
+                        : Icons.error_outline,
+                    color: check.passed
+                        ? const Color(0xFF2F9E69)
+                        : colors.error,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      check.check.label,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  Text(
+                    check.timedOut
+                        ? 'TIMEOUT'
+                        : '${check.duration.inSeconds}s · exit ${check.exitCode}',
+                    style: const TextStyle(
+                      fontFamily: 'Consolas',
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+              if (check.output.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(top: 8, bottom: 14),
+                  padding: const EdgeInsets.all(10),
+                  color: colors.onSurface.withValues(alpha: 0.04),
+                  child: SelectableText(
+                    check.output,
+                    style: const TextStyle(
+                      fontFamily: 'Consolas',
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('KEEP CHANGES'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('REVERT TURN'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MultiAgentResultsDialog extends StatelessWidget {
+  const _MultiAgentResultsDialog({required this.tasks});
+
+  final List<AgentTask> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Dialog(
+      child: SizedBox(
+        width: 860,
+        height: 620,
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.groups_2_outlined),
+              title: const Text('MULTI-AGENT RESULTS'),
+              subtitle: Text(
+                '${tasks.where((task) => task.status == AgentTaskStatus.completed).length}'
+                '/${tasks.length} completed',
+              ),
+              trailing: IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: SilkyListView.separated(
+                silkyConfig: _silkyScrollConfig,
+                padding: const EdgeInsets.all(16),
+                itemCount: tasks.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final task = tasks[index];
+                  final succeeded = task.status == AgentTaskStatus.completed;
+                  return DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colors.onSurface.withValues(alpha: 0.04),
+                      border: Border.all(color: Theme.of(context).dividerColor),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                succeeded
+                                    ? Icons.check_circle_outline
+                                    : Icons.error_outline,
+                                color: succeeded
+                                    ? const Color(0xFF2F9E69)
+                                    : colors.error,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  task.prompt,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SelectableText(
+                            task.branch.isEmpty
+                                ? task.error
+                                : '${task.branch}\n${task.worktree}',
+                            style: const TextStyle(
+                              fontFamily: 'Consolas',
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (task.result.isNotEmpty ||
+                              task.error.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              task.error.isNotEmpty ? task.error : task.result,
+                              maxLines: 5,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

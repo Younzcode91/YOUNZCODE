@@ -72,5 +72,12 @@ class ChatSessionStore {
           },
         )
         .toList(growable: false),
+    if (session.goal != null)
+      'goal': {
+        ...session.goal!.toJson(),
+        'objective': SecretScanner.redact(session.goal!.objective),
+        if (session.goal!.lastDetail.isNotEmpty)
+          'lastDetail': SecretScanner.redact(session.goal!.lastDetail),
+      },
   };
 }

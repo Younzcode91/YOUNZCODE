@@ -1,4 +1,5 @@
 import 'chat_entry.dart';
+import 'agent_goal.dart';
 
 class ChatSession {
   const ChatSession({
@@ -7,6 +8,7 @@ class ChatSession {
     required this.updatedAt,
     required this.entries,
     this.agentMessages = const [],
+    this.goal,
   });
 
   factory ChatSession.fromJson(Map<String, dynamic> json) => ChatSession(
@@ -24,6 +26,7 @@ class ChatSession {
         .whereType<Map>()
         .map((message) => Map<String, dynamic>.from(message))
         .toList(),
+    goal: _parseGoal(json['goal']),
   );
 
   final String id;
@@ -31,6 +34,7 @@ class ChatSession {
   final DateTime updatedAt;
   final List<ChatEntry> entries;
   final List<Map<String, dynamic>> agentMessages;
+  final AgentGoal? goal;
 
   String get title {
     final firstUser = entries.where((entry) => entry.role == ChatRole.user);
@@ -47,5 +51,15 @@ class ChatSession {
     'updatedAt': updatedAt.toIso8601String(),
     'entries': entries.map((entry) => entry.toJson()).toList(),
     if (agentMessages.isNotEmpty) 'agentMessages': agentMessages,
+    if (goal != null) 'goal': goal!.toJson(),
   };
+}
+
+AgentGoal? _parseGoal(Object? value) {
+  if (value is! Map) return null;
+  try {
+    return AgentGoal.fromJson(Map<String, dynamic>.from(value));
+  } catch (_) {
+    return null;
+  }
 }

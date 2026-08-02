@@ -8,6 +8,7 @@ import 'package:kode_agent_desktop/main.dart';
 import 'package:kode_agent_desktop/lottie_support.dart';
 import 'package:kode_agent_desktop/models/chat_entry.dart';
 import 'package:kode_agent_desktop/models/chat_session.dart';
+import 'package:kode_agent_desktop/models/agent_goal.dart';
 import 'package:kode_agent_desktop/services/chat_session_store.dart';
 import 'package:lottie/lottie.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -121,7 +122,7 @@ void main() {
     expect(find.byKey(const ValueKey('command-rail')), findsOneWidget);
     expect(find.byKey(const ValueKey('top-workspace-bar')), findsOneWidget);
     expect(find.byKey(const ValueKey('workspace-explorer')), findsOneWidget);
-    expect(find.textContaining('Build: v1.1.0'), findsOneWidget);
+    expect(find.textContaining('Build: v1.3.5'), findsOneWidget);
     expect(find.text('AGENT SESSION'), findsNothing);
     expect(find.text('YOUNZCODE DESKTOP'), findsNothing);
     expect(find.byKey(const ValueKey('model-selector')), findsOneWidget);
@@ -130,6 +131,42 @@ void main() {
     expect(find.text('What are we building?'), findsOneWidget);
     expect(find.text('Explain Codebase'), findsOneWidget);
     expect(find.text('ACTIVITY'), findsOneWidget);
+  });
+
+  testWidgets('membuka playground Image Generation dari command rail', (
+    tester,
+  ) async {
+    _setMockPreferences({
+      'base_url': 'http://localhost:20128',
+      'model': 'cx/gpt-5.5-image',
+      'models': ['cx/gpt-5.5-image'],
+    });
+    await tester.binding.setSurfaceSize(const Size(1400, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    await tester.tap(find.byKey(const ValueKey('rail-images')));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('image-generation-view')), findsOneWidget);
+    expect(find.text('IMAGE GENERATION'), findsOneWidget);
+    expect(
+      find.text('http://127.0.0.1:20128/v1/images/generations'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('image-run')), findsOneWidget);
+
+    await tester.enterText(
+      find.byKey(const ValueKey('image-prompt')),
+      'A cute cat wearing a hat',
+    );
+    await tester.pump();
+    final runButton = tester.widget<FilledButton>(
+      find.byKey(const ValueKey('image-run')),
+    );
+    expect(runButton.onPressed, isNotNull);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('missing persisted workspace does not leave startup loading', (
@@ -247,7 +284,10 @@ void main() {
     expect(find.text('/help'), findsOneWidget);
     expect(find.text('/terminal'), findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('slash-command-help')));
+    final helpCommand = find.byKey(const ValueKey('slash-command-help'));
+    await tester.ensureVisible(helpCommand);
+    await tester.pumpAndSettle();
+    await tester.tap(helpCommand);
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.textContaining('Slash commands:'), findsOneWidget);
     expect(
@@ -411,6 +451,76 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('slash command goal tanpa objective menampilkan bantuan', (
+    tester,
+  ) async {
+    _setMockPreferences({});
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    final field = find.byKey(const ValueKey('prompt-field'));
+    await tester.tap(field);
+    await tester.enterText(field, '/goal');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pump();
+
+    expect(
+      find.textContaining(
+        'Belum ada goal. Gunakan "/goal tujuan yang ingin diselesaikan".',
+      ),
+      findsOneWidget,
+    );
+    expect(tester.widget<TextField>(field).controller?.text, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'goal tersimpan dipulihkan sebagai banner yang dapat dilanjutkan',
+    (tester) async {
+      final workspace = (await tester.runAsync(
+        () => Directory.systemTemp.createTemp('younzcode-goal-'),
+      ))!;
+      addTearDown(
+        () => tester.runAsync(() => workspace.delete(recursive: true)),
+      );
+      _setMockPreferences({'workspace': workspace.path});
+      await ChatSessionStore().save([
+        ChatSession(
+          id: 'goal-session',
+          workspace: workspace.path,
+          updatedAt: DateTime(2026, 7, 29),
+          entries: const [
+            ChatEntry(
+              role: ChatRole.user,
+              content: '/goal selesaikan aplikasi',
+            ),
+          ],
+          goal: AgentGoal(
+            objective: 'Selesaikan aplikasi sampai seluruh test lulus',
+            status: AgentGoalStatus.paused,
+            turnCount: 2,
+            updatedAt: DateTime(2026, 7, 29),
+          ),
+        ),
+      ]);
+      await tester.binding.setSurfaceSize(const Size(1400, 850));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const KodeAgentApp());
+      await _pumpLoaded(tester);
+
+      expect(find.byKey(const ValueKey('goal-banner')), findsOneWidget);
+      expect(find.text('GOAL PAUSED · 2 TURN'), findsOneWidget);
+      expect(
+        find.text('Selesaikan aplikasi sampai seluruh test lulus'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('goal-resume')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   test('workspace tree memiliki folder dan file yang dapat dibaca', () async {
     final workspace = await Directory.systemTemp.createTemp('younzcode-tree-');
     await Directory('${workspace.path}${Platform.pathSeparator}lib').create();
@@ -452,7 +562,10 @@ void main() {
       find.widgetWithText(TextField, 'Model ID, contoh gpt-4.1'),
       'gpt-4.1',
     );
-    await tester.tap(find.text('ADD MODEL'));
+    final addModel = find.text('ADD MODEL');
+    await tester.ensureVisible(addModel);
+    await tester.pumpAndSettle();
+    await tester.tap(addModel);
     await tester.pump();
     expect(find.text('gpt-4.1'), findsOneWidget);
   });
@@ -471,6 +584,12 @@ void main() {
     expect(find.text('MODEL CONNECTION'), findsOneWidget);
     expect(find.byKey(const ValueKey('provider-preset')), findsOneWidget);
     expect(find.byKey(const ValueKey('fetch-models-button')), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.byKey(const ValueKey('model-api-key-field'))).dy,
+      lessThan(
+        tester.getTopLeft(find.byKey(const ValueKey('fetch-models-button'))).dy,
+      ),
+    );
 
     await tester.tap(find.byKey(const ValueKey('provider-preset')));
     await tester.pumpAndSettle();
@@ -505,6 +624,50 @@ void main() {
     expect(find.text('claude-opus-4-8'), findsWidgets);
   });
 
+  testWidgets('preset AgentRouter memakai endpoint milik akun pengguna', (
+    tester,
+  ) async {
+    _setMockPreferences({});
+    await tester.binding.setSurfaceSize(const Size(1200, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    await tester.tap(find.text('MANAGE MODELS'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('provider-preset')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AgentRouter (OpenAI-compatible)').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('https://agentrouter.org/v1'), findsOneWidget);
+    expect(find.text('gpt-5.5'), findsWidgets);
+  });
+
+  testWidgets(
+    'fetch provider internet tanpa API key dihentikan sebelum request',
+    (tester) async {
+      _setMockPreferences({});
+      await tester.binding.setSurfaceSize(const Size(1200, 900));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(const KodeAgentApp());
+      await _pumpLoaded(tester);
+
+      await _pumpUntilFound(tester, find.text('MANAGE MODELS'));
+      await tester.tap(find.text('MANAGE MODELS'));
+      await tester.pumpAndSettle();
+      final fetchButton = find.byKey(const ValueKey('fetch-models-button'));
+      await tester.ensureVisible(fetchButton);
+      await tester.tap(fetchButton);
+      await tester.pump();
+
+      expect(
+        find.textContaining('Isi API KEY terlebih dahulu'),
+        findsOneWidget,
+      );
+    },
+  );
+
   testWidgets(
     'preset 9router mengisi Base URL loopback tanpa menghapus model',
     (tester) async {
@@ -514,6 +677,7 @@ void main() {
       await tester.pumpWidget(const KodeAgentApp());
       await _pumpLoaded(tester);
 
+      await _pumpUntilFound(tester, find.text('MANAGE MODELS'));
       await tester.tap(find.text('MANAGE MODELS'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('provider-preset')));
@@ -521,7 +685,7 @@ void main() {
       await tester.tap(find.text('9router (lokal)').last);
       await tester.pumpAndSettle();
 
-      expect(find.text('http://127.0.0.1:20128/v1'), findsOneWidget);
+      expect(find.text('http://127.0.0.1:20128/v1'), findsWidgets);
       // Preset with no example models keeps the existing model list.
       expect(find.text('gpt-4.1-mini'), findsWidgets);
     },
@@ -583,6 +747,24 @@ void main() {
     expect(tester.takeException(), isNull, reason: 'model dialog scroll');
     expect(find.byKey(const ValueKey('model-api-key-field')), findsOneWidget);
     expect(find.text('API KEY'), findsOneWidget);
+  });
+
+  testWidgets('model manager mengikuti tinggi konten pada jendela tinggi', (
+    tester,
+  ) async {
+    _setMockPreferences({});
+    await tester.binding.setSurfaceSize(const Size(1200, 1000));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    await tester.tap(find.text('MANAGE MODELS'));
+    await tester.pumpAndSettle();
+
+    final panel = find.byKey(const ValueKey('model-dialog-panel'));
+    expect(panel, findsOneWidget);
+    expect(tester.getSize(panel).height, lessThan(800));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('tool activity dapat disembunyikan dan ditampilkan kembali', (
@@ -813,6 +995,49 @@ void main() {
 
     expect(copiedText, 'Hasil\n\n- Semua lulus');
     expect(find.text('Respons disalin.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('kartu percakapan tetap rapat dan terpusat pada layar lebar', (
+    tester,
+  ) async {
+    final workspace = (await tester.runAsync(
+      () => Directory.systemTemp.createTemp('younzcode-chat-lane-'),
+    ))!;
+    addTearDown(() => tester.runAsync(() => workspace.delete(recursive: true)));
+    _setMockPreferences({'workspace': workspace.path});
+    await ChatSessionStore().save([
+      ChatSession(
+        id: 'wide-chat',
+        workspace: workspace.path,
+        updatedAt: DateTime(2026, 7, 27),
+        entries: const [
+          ChatEntry(role: ChatRole.user, content: 'Lanjutkan'),
+          ChatEntry(
+            role: ChatRole.assistant,
+            content: 'Saya akan melanjutkan pekerjaan.',
+          ),
+        ],
+      ),
+    ]);
+    const surfaceSize = Size(1920, 1080);
+    await tester.binding.setSurfaceSize(surfaceSize);
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    final userRect = tester.getRect(
+      find.byKey(const ValueKey('user-message-card')),
+    );
+    final agentRect = tester.getRect(
+      find.byKey(const ValueKey('agent-message-card')),
+    );
+    final combinedCenter = (userRect.center.dx + agentRect.center.dx) / 2;
+
+    expect(userRect.width, lessThanOrEqualTo(760));
+    expect(agentRect.width, lessThanOrEqualTo(760));
+    expect((combinedCenter - surfaceSize.width / 2).abs(), lessThan(180));
+    expect(userRect.left, lessThan(agentRect.right));
     expect(tester.takeException(), isNull);
   });
 

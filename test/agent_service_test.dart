@@ -185,6 +185,71 @@ void main() {
     expect((messages[3] as Map)['content'], 'lanjutkan');
   });
 
+  test(
+    'continueWithPrompt mempertahankan staged edit antar-turn goal',
+    () async {
+      final workspace = await Directory.systemTemp.createTemp(
+        'younzcode-goal-staged-',
+      );
+      addTearDown(() => workspace.delete(recursive: true));
+      var requestCount = 0;
+      final client = MockClient((request) async {
+        requestCount++;
+        final message = switch (requestCount) {
+          1 => {
+            'role': 'assistant',
+            'content': null,
+            'tool_calls': [
+              {
+                'id': 'goal-write-1',
+                'type': 'function',
+                'function': {
+                  'name': 'write_file',
+                  'arguments': jsonEncode({
+                    'path': 'goal.txt',
+                    'content': 'turn pertama',
+                  }),
+                },
+              },
+            ],
+          },
+          2 => {'role': 'assistant', 'content': 'turn pertama selesai'},
+          _ => {'role': 'assistant', 'content': 'goal selesai'},
+        };
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {'message': message},
+            ],
+          }),
+          200,
+        );
+      });
+      final agent = AgentService(
+        baseUrl: 'https://example.test/v1',
+        apiKey: 'key',
+        model: 'model',
+        workspace: workspace.path,
+        requestPermission: (_, _) async => PermissionDecision.allowOnce,
+        onToolActivity: (_, _, _, _) {},
+        onStatus: (_) {},
+        allowWrite: true,
+        allowTerminal: false,
+        environment: const {},
+        timeoutMs: 1000,
+        headers: const {},
+        httpClient: client,
+      );
+      addTearDown(agent.dispose);
+
+      expect(await agent.send('mulai goal'), 'turn pertama selesai');
+      expect(agent.pendingChanges?.files.single.path, 'goal.txt');
+      expect(await agent.continueWithPrompt('lanjutkan goal'), 'goal selesai');
+      expect(agent.pendingChanges?.files.single.path, 'goal.txt');
+      expect(await File('${workspace.path}/goal.txt').exists(), isFalse);
+    },
+  );
+
   test('plan mode tidak mengirim tool write atau terminal', () async {
     late List<dynamic> tools;
     final client = MockClient((request) async {
@@ -891,6 +956,187 @@ void main() {
 
     expect(await agent.send('sapa'), 'Halo');
   });
+
+  test(
+    'respons kosong dicoba ulang dengan mode transport alternatif',
+    () async {
+      var requestCount = 0;
+      final streamingModes = <bool>[];
+      final statuses = <String>[];
+      final client = MockClient((request) async {
+        requestCount++;
+        final body = jsonDecode(request.body) as Map<String, dynamic>;
+        streamingModes.add(body['stream'] as bool);
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {
+                  'role': 'assistant',
+                  'content': requestCount == 1 ? null : 'jawaban sudah pulih',
+                },
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final agent = AgentService(
+        baseUrl: 'http://127.0.0.1:20128/v1',
+        apiKey: 'key',
+        model: 'model',
+        workspace: '.',
+        requestPermission: (_, _) async => PermissionDecision.reject,
+        onToolActivity: (_, _, _, _) {},
+        onStatus: statuses.add,
+        allowWrite: false,
+        allowTerminal: false,
+        environment: const {},
+        timeoutMs: 1000,
+        headers: const {},
+        maxRequestAttempts: 2,
+        retryBaseDelay: Duration.zero,
+        httpClient: client,
+      );
+      addTearDown(agent.dispose);
+
+      expect(await agent.send('lanjutkan'), 'jawaban sudah pulih');
+      expect(requestCount, 2);
+      expect(streamingModes, [false, true]);
+      expect(
+        statuses,
+        contains(contains('Respons provider kosong, meminta jawaban ulang')),
+      );
+    },
+  );
+
+  test(
+    'respons tetap kosong menghasilkan error, bukan sukses kosong',
+    () async {
+      final client = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'choices': [
+              {
+                'message': {'role': 'assistant', 'content': null},
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final agent = AgentService(
+        baseUrl: 'http://127.0.0.1:20128/v1',
+        apiKey: 'key',
+        model: 'model',
+        workspace: '.',
+        requestPermission: (_, _) async => PermissionDecision.reject,
+        onToolActivity: (_, _, _, _) {},
+        onStatus: (_) {},
+        allowWrite: false,
+        allowTerminal: false,
+        environment: const {},
+        timeoutMs: 1000,
+        headers: const {},
+        maxRequestAttempts: 2,
+        retryBaseDelay: Duration.zero,
+        httpClient: client,
+      );
+      addTearDown(agent.dispose);
+
+      await expectLater(
+        agent.send('lanjutkan'),
+        throwsA(isA<AgentEmptyResponseException>()),
+      );
+    },
+  );
+
+  test(
+    'body HTTP kosong juga dicoba ulang lalu dilaporkan sebagai error',
+    () async {
+      var requestCount = 0;
+      final client = MockClient((request) async {
+        requestCount++;
+        return http.Response(
+          '',
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final agent = AgentService(
+        baseUrl: 'http://127.0.0.1:20128/v1',
+        apiKey: 'key',
+        model: 'model',
+        workspace: '.',
+        requestPermission: (_, _) async => PermissionDecision.reject,
+        onToolActivity: (_, _, _, _) {},
+        onStatus: (_) {},
+        allowWrite: false,
+        allowTerminal: false,
+        environment: const {},
+        timeoutMs: 1000,
+        headers: const {},
+        maxRequestAttempts: 2,
+        retryBaseDelay: Duration.zero,
+        httpClient: client,
+      );
+      addTearDown(agent.dispose);
+
+      await expectLater(
+        agent.send('lanjutkan'),
+        throwsA(isA<AgentEmptyResponseException>()),
+      );
+      expect(requestCount, 2);
+    },
+  );
+
+  test(
+    'payload Responses API output_text dinormalisasi menjadi jawaban',
+    () async {
+      final client = MockClient((request) async {
+        return http.Response(
+          jsonEncode({
+            'output': [
+              {
+                'type': 'reasoning',
+                'summary': [
+                  {'type': 'summary_text', 'text': 'internal'},
+                ],
+              },
+              {
+                'type': 'message',
+                'content': [
+                  {'type': 'output_text', 'text': 'jawaban dari output_text'},
+                ],
+              },
+            ],
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      });
+      final agent = AgentService(
+        baseUrl: 'http://127.0.0.1:20128/v1',
+        apiKey: 'key',
+        model: 'model',
+        workspace: '.',
+        requestPermission: (_, _) async => PermissionDecision.reject,
+        onToolActivity: (_, _, _, _) {},
+        onStatus: (_) {},
+        allowWrite: false,
+        allowTerminal: false,
+        environment: const {},
+        timeoutMs: 1000,
+        headers: const {},
+        httpClient: client,
+      );
+      addTearDown(agent.dispose);
+
+      expect(await agent.send('lanjutkan'), 'jawaban dari output_text');
+    },
+  );
 
   test('menangkap reasoning dan token usage dari stream', () async {
     String? capturedReasoning;

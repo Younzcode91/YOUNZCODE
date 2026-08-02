@@ -214,6 +214,7 @@ class SyntaxEditingController extends TextEditingController {
   SyntaxEditingController({required this.language, super.text});
 
   final EditorLanguage language;
+  Set<String> workspaceIdentifiers = const {};
 
   List<String> completionsAtCursor() {
     final offset = selection.baseOffset.clamp(0, text.length);
@@ -229,6 +230,7 @@ class SyntaxEditingController extends TextEditingController {
             ...language.keywords,
             ...language.snippets.keys,
             ...identifiers,
+            ...workspaceIdentifiers,
           }.where((item) => item != prefix && item.startsWith(prefix)).toList()
           ..sort((a, b) {
             final aKeyword = language.keywords.contains(a) ? 0 : 1;

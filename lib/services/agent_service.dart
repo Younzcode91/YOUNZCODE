@@ -1,16 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
 import '../models/chat_entry.dart';
 import '../models/workspace_change.dart';
 import 'approval_mode.dart';
+import 'agent_completion_client.dart';
+import 'agent_errors.dart';
+import 'browser_agent_service.dart';
 import 'mcp_client.dart';
-import 'provider_adapter.dart';
-import 'settings_store.dart';
+import 'tool_permission_store.dart';
 import 'workspace_tools.dart';
+
+export 'agent_errors.dart'
+    show
+        AgentCancelledException,
+        AgentEmptyResponseException,
+        AgentHttpException,
+        AgentStepLimitException,
+        AgentTurnTimeoutException;
 
 typedef ToolActivity =
     void Function(String id, String name, String detail, String state);
@@ -28,38 +37,6 @@ typedef AgentInsight =
       int? completionTokens,
       int? totalTokens,
     });
-
-class AgentCancelledException implements Exception {
-  const AgentCancelledException([
-    this.message = 'Tugas dibatalkan oleh pengguna.',
-  ]);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
-class AgentStepLimitException implements Exception {
-  const AgentStepLimitException(this.maxSteps);
-
-  final int maxSteps;
-
-  @override
-  String toString() =>
-      'Agent mencapai batas $maxSteps langkah. Checkpoint telah disimpan; '
-      'lanjutkan dari checkpoint untuk meneruskan.';
-}
-
-class AgentTurnTimeoutException extends TimeoutException {
-  AgentTurnTimeoutException(this.limit)
-    : super(
-        'Tugas melewati batas waktu total ${limit.inMinutes} menit.',
-        limit,
-      );
-
-  final Duration limit;
-}
 
 class _AgentFinalizationException implements Exception {
   const _AgentFinalizationException(this.reason);
@@ -93,6 +70,9 @@ class AgentService {
     this.onCheckpoint,
     this.onChanges,
     this.onInsight,
+    this.toolPermissionPolicies = const {},
+    this.onToolPermissionChanged,
+    BrowserAutomation? browser,
     http.Client? httpClient,
   }) : _tools = WorkspaceTools(
          root: workspace,
@@ -105,8 +85,25 @@ class AgentService {
          commandTimeoutMs: timeoutMs,
          onChangesChanged: onChanges,
          stageEdits: true,
-       ),
-       _injectedHttpClient = httpClient;
+         browser: browser,
+         toolPermissionPolicies: toolPermissionPolicies,
+         onToolPermissionChanged: onToolPermissionChanged,
+       ) {
+    _completionClient = AgentCompletionClient(
+      baseUrl: baseUrl,
+      apiKey: apiKey,
+      model: model,
+      timeoutMs: timeoutMs,
+      headers: headers,
+      maxRequestAttempts: maxRequestAttempts,
+      retryBaseDelay: retryBaseDelay,
+      onStatus: onStatus,
+      isCancelled: () => _cancelRequested,
+      shouldStop: () => _finalizationRequested,
+      onInsight: onInsight,
+      httpClient: httpClient,
+    );
+  }
 
   final String baseUrl;
   final String apiKey;
@@ -131,12 +128,13 @@ class AgentService {
   final AgentCheckpoint? onCheckpoint;
   final AgentChanges? onChanges;
   final AgentInsight? onInsight;
+  final Map<String, ToolPermissionPolicy> toolPermissionPolicies;
+  final ToolPermissionChanged? onToolPermissionChanged;
   final WorkspaceTools _tools;
-  final http.Client? _injectedHttpClient;
+  late final AgentCompletionClient _completionClient;
   final List<Map<String, dynamic>> _messages = [];
   final List<String> _recentToolCalls = [];
   List<Map<String, Object>>? _toolDefinitions;
-  http.Client? _activeHttpClient;
   bool _cancelRequested = false;
   bool _finalizationRequested = false;
   bool _turnDeadlineReached = false;
@@ -211,6 +209,21 @@ class AgentService {
     return _runLoop();
   }
 
+  /// Continues the same logical task with an internal user prompt while
+  /// preserving staged workspace edits from the preceding completion.
+  Future<String> continueWithPrompt(String prompt) async {
+    _ensureUsable();
+    if (_messages.isEmpty) {
+      throw StateError('Belum ada checkpoint yang dapat dilanjutkan.');
+    }
+    _cancelRequested = false;
+    _recentToolCalls.clear();
+    onStatus('Melanjutkan goal dari checkpoint');
+    _messages.add({'role': 'user', 'content': prompt});
+    _notifyCheckpoint();
+    return _runLoop();
+  }
+
   Future<String> _runLoop() async {
     final effectiveTurnDuration = maxTurnDuration > Duration.zero
         ? maxTurnDuration
@@ -243,13 +256,19 @@ class AgentService {
             explorationDeadline,
           );
           _throwIfCancelled();
-          _messages.add(message);
-          _notifyCheckpoint();
           final calls = message['tool_calls'] as List<dynamic>?;
           if (calls == null || calls.isEmpty) {
+            final answer = _messageText(message['content']).trim();
+            if (answer.isEmpty) {
+              throw const AgentEmptyResponseException();
+            }
+            _messages.add(message);
+            _notifyCheckpoint();
             onStatus('Jawaban siap');
-            return _messageText(message['content']);
+            return answer;
           }
+          _messages.add(message);
+          _notifyCheckpoint();
 
           _AgentFinalizationException? pendingFinalization;
           for (final rawCall in calls) {
@@ -411,7 +430,7 @@ class AgentService {
     if (_finalizationRequested) return;
     _finalizationRequested = true;
     onStatus('Menyiapkan ringkasan akhir');
-    if (_injectedHttpClient == null) _activeHttpClient?.close();
+    _completionClient.closeActiveTransport();
     await _tools.cancelActive();
   }
 
@@ -439,12 +458,14 @@ class AgentService {
         limit,
       );
       _throwIfCancelled();
-      _messages.add(message);
-      _notifyCheckpoint();
       final answer = _messageText(message['content']).trim();
       if (answer.isEmpty) {
-        throw StateError('Model tidak memberikan ringkasan akhir.');
+        throw const AgentEmptyResponseException(
+          'Model tidak memberikan ringkasan akhir setelah dicoba ulang.',
+        );
       }
+      _messages.add(message);
+      _notifyCheckpoint();
       onStatus('Jawaban siap');
       return answer;
     } on TimeoutException {
@@ -485,7 +506,7 @@ class AgentService {
     if (_turnDeadlineReached) return;
     _turnDeadlineReached = true;
     onStatus('Batas waktu total ${limit.inMinutes} menit tercapai');
-    if (_injectedHttpClient == null) _activeHttpClient?.close();
+    _completionClient.closeActiveTransport();
     await _tools.cancelActive();
   }
 
@@ -493,379 +514,21 @@ class AgentService {
     bool allowTools = true,
     String? finalInstruction,
   }) async {
-    Object? lastError;
-    var useStreaming = !_isLocal9Router;
-    for (var attempt = 1; attempt <= maxRequestAttempts; attempt++) {
-      _throwIfCancelled();
-      if (allowTools && _finalizationRequested) {
-        return const {'role': 'assistant', 'content': ''};
-      }
-      var switchingToCompatibleMode = false;
-      try {
-        return await _performRequest(
-          stream: useStreaming,
-          allowTools: allowTools,
-          finalInstruction: finalInstruction,
-        );
-      } on AgentHttpException catch (error) {
-        lastError = error;
-        if (!error.isRetryable || attempt == maxRequestAttempts) rethrow;
-      } on TimeoutException catch (error) {
-        lastError = error;
-        if (attempt == maxRequestAttempts) rethrow;
-      } on http.ClientException catch (error) {
-        if (_cancelRequested) throw const AgentCancelledException();
-        if (allowTools && _finalizationRequested) {
-          return const {'role': 'assistant', 'content': ''};
-        }
-        lastError = error;
-        final nextStreamingMode = _isLocal9Router;
-        switchingToCompatibleMode = useStreaming != nextStreamingMode;
-        useStreaming = nextStreamingMode;
-        if (attempt == maxRequestAttempts) rethrow;
-      }
-      final transportClosed = lastError is http.ClientException;
-      onStatus(
-        '${switchingToCompatibleMode
-            ? _isLocal9Router
-                  ? 'Respons lokal terputus, beralih ke streaming'
-                  : 'Streaming terputus, beralih ke mode kompatibel'
-            : transportClosed
-            ? 'Koneksi provider terputus'
-            : 'Gangguan koneksi'}, '
-        'mencoba ulang ($attempt/$maxRequestAttempts)',
-      );
-      final retryDelay = Duration(
-        milliseconds: retryBaseDelay.inMilliseconds * (1 << (attempt - 1)),
-      );
-      if (retryDelay > Duration.zero) {
-        await Future<void>.delayed(retryDelay);
-      }
-    }
-    throw StateError('Request model gagal: $lastError');
-  }
-
-  bool get _isLocal9Router {
-    final uri = Uri.tryParse(baseUrl);
-    return uri != null &&
-        uri.scheme == 'http' &&
-        {'127.0.0.1', 'localhost'}.contains(uri.host.toLowerCase()) &&
-        uri.port == 20128;
-  }
-
-  Future<Map<String, dynamic>> _performRequest({
-    required bool stream,
-    required bool allowTools,
-    String? finalInstruction,
-  }) async {
-    final protocol = detectProviderProtocol(baseUrl);
-    final native = protocol != ProviderProtocol.openai;
-    final client = _injectedHttpClient ?? http.Client();
-    _activeHttpClient = client;
-    final messages = <Map<String, dynamic>>[
-      ..._messages,
-      if (finalInstruction != null)
-        {'role': 'system', 'content': finalInstruction},
-    ];
-    final toolDefs = allowTools
+    final definitions = allowTools
         ? (_toolDefinitions ??= await _tools.initializeAndDefinitions())
         : const <Map<String, Object>>[];
-    final http.Request request;
-    if (protocol == ProviderProtocol.anthropic) {
-      final built = buildAnthropicRequest(
-        baseUrl: baseUrl,
-        apiKey: apiKey,
-        model: model,
-        messages: messages,
-        tools: toolDefs,
-        extraHeaders: headers,
+    try {
+      return await _completionClient.request(
+        messages: _messages,
+        toolDefinitions: definitions,
+        allowTools: allowTools,
+        finalInstruction: finalInstruction,
       );
-      request = http.Request('POST', built.url)
-        ..headers.addAll(built.headers)
-        ..body = jsonEncode(built.body);
-    } else if (protocol == ProviderProtocol.gemini) {
-      final built = buildGeminiRequest(
-        baseUrl: baseUrl,
-        apiKey: apiKey,
-        model: model,
-        messages: messages,
-        tools: toolDefs,
-        extraHeaders: headers,
+    } on AgentCompletionStoppedException {
+      throw const _AgentFinalizationException(
+        'transport eksplorasi dihentikan untuk finalisasi',
       );
-      request = http.Request('POST', built.url)
-        ..headers.addAll(built.headers)
-        ..body = jsonEncode(built.body);
-    } else {
-      final requestBaseUrl = normalizeProviderBaseUrl(baseUrl);
-      final requestBody = <String, Object?>{
-        'model': model,
-        'messages': messages,
-        if (allowTools) 'tools': toolDefs,
-        if (allowTools) 'tool_choice': 'auto',
-        'stream': stream,
-      };
-      request =
-          http.Request('POST', Uri.parse('$requestBaseUrl/chat/completions'))
-            ..headers.addAll({
-              ...headers,
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-              'Accept': stream
-                  ? 'text/event-stream, application/json'
-                  : 'application/json',
-            })
-            ..body = jsonEncode(requestBody);
     }
-    final requestTimeout = Duration(
-      milliseconds: timeoutMs > 0 ? timeoutMs : 120000,
-    );
-
-    try {
-      final response = await client
-          .send(request)
-          .timeout(
-            requestTimeout,
-            onTimeout: () {
-              if (_injectedHttpClient == null) client.close();
-              throw TimeoutException(
-                'Model tidak merespons dalam ${requestTimeout.inSeconds} detik.',
-                requestTimeout,
-              );
-            },
-          );
-      final byteStream = response.stream.timeout(
-        requestTimeout,
-        onTimeout: (sink) {
-          sink.addError(
-            TimeoutException(
-              'Aliran respons model berhenti lebih dari '
-              '${requestTimeout.inSeconds} detik.',
-              requestTimeout,
-            ),
-          );
-          sink.close();
-        },
-      );
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        final body = await utf8.decodeStream(byteStream);
-        throw AgentHttpException.fromParts(response.statusCode, body);
-      }
-      if (native) {
-        final body = await utf8.decodeStream(byteStream);
-        final decoded = jsonDecode(body);
-        if (decoded is! Map) {
-          throw const FormatException('Respons provider bukan objek JSON.');
-        }
-        final payload = Map<String, dynamic>.from(decoded);
-        final result = protocol == ProviderProtocol.anthropic
-            ? parseAnthropicResponse(payload)
-            : parseGeminiResponse(payload);
-        _emitInsight('', result.usage);
-        return result.message;
-      }
-      return await (stream
-          ? _decodeCompletionStream(byteStream)
-          : _decodeJsonCompletion(byteStream));
-    } finally {
-      if (identical(_activeHttpClient, client)) _activeHttpClient = null;
-      if (_injectedHttpClient == null) client.close();
-    }
-  }
-
-  Future<Map<String, dynamic>> _decodeJsonCompletion(
-    Stream<List<int>> byteStream,
-  ) async {
-    final bytes = BytesBuilder(copy: false);
-    http.ClientException? transportError;
-    try {
-      await for (final chunk in byteStream) {
-        _throwIfCancelled();
-        bytes.add(chunk);
-      }
-    } on http.ClientException catch (error) {
-      if (_cancelRequested) throw const AgentCancelledException();
-      transportError = error;
-    }
-
-    final body = utf8.decode(bytes.takeBytes()).trim();
-    if (body.isEmpty) {
-      if (transportError != null) throw transportError;
-      throw StateError('Provider mengembalikan respons kosong.');
-    }
-    try {
-      final payload = jsonDecode(body);
-      if (payload is! Map) {
-        throw const FormatException('Respons provider bukan objek JSON.');
-      }
-      return _messageFromPayload(Map<String, dynamic>.from(payload));
-    } catch (_) {
-      if (transportError != null) throw transportError;
-      rethrow;
-    }
-  }
-
-  Future<Map<String, dynamic>> _decodeCompletionStream(
-    Stream<List<int>> byteStream,
-  ) async {
-    final plainBody = StringBuffer();
-    final content = StringBuffer();
-    final reasoning = StringBuffer();
-    Object? usage;
-    final toolCalls = <int, Map<String, dynamic>>{};
-    Map<String, dynamic>? fullMessage;
-    var role = 'assistant';
-    var sawSse = false;
-    var sawTerminalEvent = false;
-
-    try {
-      await for (final line
-          in byteStream
-              .transform(utf8.decoder)
-              .transform(const LineSplitter())) {
-        _throwIfCancelled();
-        if (!line.startsWith('data:')) {
-          if (line.trim().isNotEmpty) plainBody.writeln(line);
-          continue;
-        }
-        sawSse = true;
-        final data = line.substring(5).trim();
-        if (data.isEmpty) continue;
-        if (data == '[DONE]') {
-          sawTerminalEvent = true;
-          continue;
-        }
-        final Object? decoded;
-        try {
-          decoded = jsonDecode(data);
-        } on FormatException {
-          // Skip a malformed / partial SSE chunk instead of aborting the turn.
-          continue;
-        }
-        if (decoded is! Map) continue;
-        final payload = Map<String, dynamic>.from(decoded);
-        if (payload['error'] != null) {
-          throw AgentHttpException.fromParts(502, jsonEncode(payload));
-        }
-        if (payload['usage'] != null) usage = payload['usage'];
-        final choices = payload['choices'] as List<dynamic>? ?? const [];
-        if (choices.isEmpty) continue;
-        final choice = Map<String, dynamic>.from(choices.first as Map);
-        if (choice['finish_reason'] != null) sawTerminalEvent = true;
-        final rawMessage = choice['message'];
-        if (rawMessage is Map) {
-          fullMessage = Map<String, dynamic>.from(rawMessage);
-          continue;
-        }
-        final rawDelta = choice['delta'];
-        if (rawDelta is! Map) continue;
-        final delta = Map<String, dynamic>.from(rawDelta);
-        if (delta['role'] is String) role = delta['role'] as String;
-        content.write(_messageText(delta['content']));
-        reasoning.write(
-          _messageText(delta['reasoning_content'] ?? delta['reasoning']),
-        );
-        for (final rawCall
-            in delta['tool_calls'] as List<dynamic>? ?? const []) {
-          final call = Map<String, dynamic>.from(rawCall as Map);
-          final index = call['index'] as int? ?? toolCalls.length;
-          final target = toolCalls.putIfAbsent(
-            index,
-            () => {
-              'id': '',
-              'type': 'function',
-              'function': {'name': '', 'arguments': ''},
-            },
-          );
-          if (call['id'] is String) {
-            target['id'] = '${target['id']}${call['id']}';
-          }
-          if (call['type'] is String) target['type'] = call['type'];
-          final rawFunction = call['function'];
-          if (rawFunction is Map) {
-            final function = target['function'] as Map<String, dynamic>;
-            if (rawFunction['name'] is String) {
-              function['name'] =
-                  '${function['name']}${rawFunction['name'] as String}';
-            }
-            if (rawFunction['arguments'] is String) {
-              function['arguments'] =
-                  '${function['arguments']}${rawFunction['arguments'] as String}';
-            }
-          }
-        }
-      }
-    } on http.ClientException {
-      if (!sawTerminalEvent) rethrow;
-    }
-
-    if (!sawSse) {
-      final body = plainBody.toString().trim();
-      if (body.isEmpty) {
-        throw StateError('Provider mengembalikan respons kosong.');
-      }
-      // _messageFromPayload emits its own insight for the non-SSE path.
-      return _messageFromPayload(jsonDecode(body) as Map<String, dynamic>);
-    }
-    _emitInsight(reasoning.toString(), usage);
-    if (fullMessage != null) {
-      fullMessage
-        ..remove('reasoning_content')
-        ..remove('reasoning');
-      return fullMessage;
-    }
-    final orderedCalls = toolCalls.entries.toList()
-      ..sort((left, right) => left.key.compareTo(right.key));
-    if (content.isEmpty && orderedCalls.isEmpty) {
-      throw StateError('Provider tidak mengembalikan isi jawaban.');
-    }
-    return {
-      'role': role,
-      'content': content.isEmpty ? null : content.toString(),
-      if (orderedCalls.isNotEmpty)
-        'tool_calls': orderedCalls.map((entry) => entry.value).toList(),
-    };
-  }
-
-  Map<String, dynamic> _messageFromPayload(Map<String, dynamic> payload) {
-    final choices = payload['choices'] as List<dynamic>?;
-    if (choices == null || choices.isEmpty) {
-      throw StateError('Provider tidak mengembalikan pilihan jawaban.');
-    }
-    final choice = Map<String, dynamic>.from(choices.first as Map);
-    final message = Map<String, dynamic>.from(choice['message'] as Map);
-    _emitInsight(
-      _messageText(message['reasoning_content'] ?? message['reasoning']),
-      payload['usage'],
-    );
-    // Keep reasoning out of the conversation history sent back to the provider.
-    message.remove('reasoning_content');
-    message.remove('reasoning');
-    return message;
-  }
-
-  void _emitInsight(String reasoning, Object? usage) {
-    final callback = onInsight;
-    if (callback == null) return;
-    int? asInt(Object? value) => value is num ? value.toInt() : null;
-    final usageMap = usage is Map ? usage : null;
-    final trimmedReasoning = reasoning.trim();
-    final prompt = asInt(usageMap?['prompt_tokens']);
-    final completion = asInt(usageMap?['completion_tokens']);
-    final total =
-        asInt(usageMap?['total_tokens']) ??
-        ((prompt != null && completion != null) ? prompt + completion : null);
-    if (trimmedReasoning.isEmpty &&
-        prompt == null &&
-        completion == null &&
-        total == null) {
-      return;
-    }
-    callback(
-      reasoning: trimmedReasoning.isEmpty ? null : trimmedReasoning,
-      promptTokens: prompt,
-      completionTokens: completion,
-      totalTokens: total,
-    );
   }
 
   static String _messageText(Object? value) {
@@ -906,6 +569,8 @@ class AgentService {
         'Anda adalah coding agent pragmatis. Workspace: $workspace. '
         'Periksa kode sebelum mengubahnya, buat perubahan sekecil mungkin, '
         'dan verifikasi dengan test atau build. Gunakan tool secara hemat, '
+        'Untuk tugas web, panggil browser_open lalu browser_read sebelum '
+        'berinteraksi dengan ref elemen; jangan menebak ref. '
         'jangan ulangi tes yang sudah timeout, dan berikan kesimpulan segera '
         'setelah bukti utama cukup. Abaikan folder build, release, '
         'release-*, dan graphify-out kecuali memang relevan. '
@@ -930,8 +595,7 @@ class AgentService {
     if (_disposed) return;
     _cancelRequested = true;
     onStatus('Membatalkan tugas');
-    _activeHttpClient?.close();
-    _injectedHttpClient?.close();
+    _completionClient.dispose();
     await _tools.cancelActive();
     _disposed = true;
   }
@@ -940,8 +604,7 @@ class AgentService {
     if (_disposed) return;
     _disposed = true;
     _cancelRequested = true;
-    _activeHttpClient?.close();
-    _injectedHttpClient?.close();
+    _completionClient.dispose();
     await _tools.dispose();
   }
 
@@ -952,6 +615,15 @@ class AgentService {
     'write_file' => 'Menyiapkan perubahan file',
     'replace_text' => 'Menerapkan perubahan kode',
     'run_command' => 'Menjalankan verifikasi',
+    'browser_open' => 'Membuka halaman di Agent Browser',
+    'browser_read' => 'Membaca struktur halaman',
+    'browser_click' => 'Mengklik elemen browser',
+    'browser_type' => 'Mengisi halaman browser',
+    'browser_upload' => 'Menyiapkan upload browser',
+    'browser_screenshot' => 'Mengambil screenshot browser',
+    'browser_back' ||
+    'browser_forward' ||
+    'browser_reload' => 'Menavigasi Agent Browser',
     _ => 'Menjalankan $name',
   };
 
@@ -959,6 +631,13 @@ class AgentService {
     final value = switch (name) {
       'run_command' => arguments['command'],
       'read_file' || 'write_file' || 'replace_text' => arguments['path'],
+      'browser_open' => arguments['url'],
+      'browser_click' || 'browser_type' || 'browser_upload' => arguments['ref'],
+      'browser_read' ||
+      'browser_screenshot' ||
+      'browser_back' ||
+      'browser_forward' ||
+      'browser_reload' => 'Agent Browser',
       'list_files' => arguments['pattern'],
       'search_text' => arguments['pattern'],
       _ => arguments.isEmpty ? null : jsonEncode(arguments),
@@ -1012,80 +691,4 @@ class AgentService {
         ? normalized
         : '${normalized.substring(0, 237)}...';
   }
-}
-
-class AgentHttpException implements Exception {
-  const AgentHttpException(this.message, {this.statusCode});
-
-  factory AgentHttpException.fromResponse(http.Response response) {
-    return AgentHttpException.fromParts(response.statusCode, response.body);
-  }
-
-  factory AgentHttpException.fromParts(int statusCode, String responseBody) {
-    try {
-      final body = jsonDecode(responseBody) as Map<String, dynamic>;
-      final error = body['error'];
-      if (error is Map && error['message'] is String) {
-        return AgentHttpException(
-          '$statusCode: ${error['message']}',
-          statusCode: statusCode,
-        );
-      }
-      if (error is String) {
-        return AgentHttpException(
-          '$statusCode: $error',
-          statusCode: statusCode,
-        );
-      }
-      if (body['message'] is String) {
-        return AgentHttpException(
-          '$statusCode: ${body['message']}',
-          statusCode: statusCode,
-        );
-      }
-    } catch (_) {
-      // Gunakan body mentah jika provider tidak mengirim JSON error.
-    }
-    final detail = responseBody.trim();
-    final lowerDetail = detail.toLowerCase();
-    final looksLikeHtml =
-        lowerDetail.startsWith('<!doctype html') ||
-        lowerDetail.startsWith('<html');
-    if (looksLikeHtml) {
-      return AgentHttpException(
-        'HTTP $statusCode: endpoint API provider tidak ditemukan. '
-        'Periksa Base URL; endpoint OpenAI-compatible biasanya berakhir /v1.',
-        statusCode: statusCode,
-      );
-    }
-    final safeDetail = detail.length > 500
-        ? '${detail.substring(0, 500)}…'
-        : detail;
-    return AgentHttpException(
-      safeDetail.isEmpty ? 'HTTP $statusCode' : '$statusCode: $safeDetail',
-      statusCode: statusCode,
-    );
-  }
-
-  final String message;
-  final int? statusCode;
-
-  bool get isRetryable =>
-      // 529 is Anthropic's overloaded_error — a transient overload distinct from
-      // 429 rate-limiting, and meant to be retried with backoff like 502/503/504.
-      const {
-        408,
-        425,
-        429,
-        502,
-        503,
-        504,
-        520,
-        522,
-        524,
-        529,
-      }.contains(statusCode);
-
-  @override
-  String toString() => message;
 }

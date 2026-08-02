@@ -63,6 +63,14 @@ const _providerPresets = <_ProviderPreset>[
     keyHint: 'Satu key untuk banyak model — openrouter.ai/keys',
   ),
   _ProviderPreset(
+    label: 'AgentRouter (OpenAI-compatible)',
+    baseUrl: 'https://agentrouter.org/v1',
+    models: ['gpt-5.5', 'glm-5.1', 'kimi-k2.6'],
+    keyHint:
+        'API key dari agentrouter.org. Jika muncul "unauthorized client '
+        'detected", minta AgentRouter mengizinkan YOUNZCODE sebagai client.',
+  ),
+  _ProviderPreset(
     label: 'Google Gemini (OpenAI-compatible)',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
     models: ['gemini-2.5-pro', 'gemini-2.5-flash'],

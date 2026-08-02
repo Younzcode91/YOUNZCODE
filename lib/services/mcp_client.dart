@@ -9,6 +9,8 @@ import '../models/addon.dart';
 typedef McpLaunchApproval =
     Future<bool> Function(String command, List<String> arguments);
 
+enum McpConnectionStatus { disconnected, connecting, ready, failed }
+
 class McpTool {
   const McpTool({
     required this.name,
@@ -19,6 +21,28 @@ class McpTool {
   final String name;
   final String description;
   final Map<String, dynamic> inputSchema;
+}
+
+class McpHealth {
+  const McpHealth({
+    required this.serverName,
+    required this.transport,
+    required this.status,
+    required this.latency,
+    required this.tools,
+    required this.logs,
+    this.error = '',
+  });
+
+  final String serverName;
+  final McpTransport transport;
+  final McpConnectionStatus status;
+  final Duration latency;
+  final List<McpTool> tools;
+  final List<String> logs;
+  final String error;
+
+  bool get healthy => status == McpConnectionStatus.ready;
 }
 
 class McpClient {
@@ -36,16 +60,41 @@ class McpClient {
   final _pending = <int, Completer<Map<String, dynamic>>>{};
   int _sequence = 1;
   List<McpTool> _tools = const [];
+  McpConnectionStatus _status = McpConnectionStatus.disconnected;
+  String _lastError = '';
+  Map<String, dynamic> _serverInfo = const {};
+  final List<String> _logs = [];
 
   bool get _isHttp => config.transport == McpTransport.http;
 
   List<McpTool> get tools => _tools;
+  McpConnectionStatus get status => _status;
+  String get lastError => _lastError;
+  Map<String, dynamic> get serverInfo => Map.unmodifiable(_serverInfo);
+  List<String> get logs => List.unmodifiable(_logs);
 
   Future<void> initialize({required McpLaunchApproval approveLaunch}) async {
-    if (_isHttp) {
-      await _initializeHttp(approveLaunch);
-      return;
+    if (_status == McpConnectionStatus.ready) return;
+    _status = McpConnectionStatus.connecting;
+    _lastError = '';
+    _log('Connecting via ${config.transport.name}');
+    try {
+      if (_isHttp) {
+        await _initializeHttp(approveLaunch);
+      } else {
+        await _initializeStdio(approveLaunch);
+      }
+      _status = McpConnectionStatus.ready;
+      _log('Ready with ${_tools.length} tools');
+    } catch (error) {
+      _status = McpConnectionStatus.failed;
+      _lastError = '$error';
+      _log('Connection failed: $error');
+      rethrow;
     }
+  }
+
+  Future<void> _initializeStdio(McpLaunchApproval approveLaunch) async {
     if (_process != null) return;
     if (config.command == null) {
       throw StateError('MCP stdio server requires a command.');
@@ -65,13 +114,18 @@ class McpClient {
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen(_handleLine);
-    _stderr = process.stderr.transform(utf8.decoder).listen((_) {});
+    _stderr = process.stderr
+        .transform(utf8.decoder)
+        .listen((message) => _log('stderr: ${message.trim()}'));
     unawaited(process.exitCode.then((_) => _closePending()));
-    await _request('initialize', {
+    final initialized = await _request('initialize', {
       'protocolVersion': '2025-03-26',
       'capabilities': {},
       'clientInfo': {'name': 'YOUNZCODE', 'version': '1.1.0'},
     });
+    _serverInfo = Map<String, dynamic>.from(
+      initialized['serverInfo'] as Map? ?? const {},
+    );
     _notify('notifications/initialized');
     await refreshTools();
   }
@@ -90,13 +144,46 @@ class McpClient {
       throw StateError('MCP server launch was denied.');
     }
     _httpClient = _injectedHttpClient ?? http.Client();
-    await _request('initialize', {
+    final initialized = await _request('initialize', {
       'protocolVersion': '2025-03-26',
       'capabilities': {},
       'clientInfo': {'name': 'YOUNZCODE', 'version': '1.1.0'},
     });
+    _serverInfo = Map<String, dynamic>.from(
+      initialized['serverInfo'] as Map? ?? const {},
+    );
     _notify('notifications/initialized');
     await refreshTools();
+  }
+
+  Future<McpHealth> healthCheck({
+    required McpLaunchApproval approveLaunch,
+  }) async {
+    final stopwatch = Stopwatch()..start();
+    try {
+      await initialize(approveLaunch: approveLaunch);
+      await refreshTools();
+      stopwatch.stop();
+      return McpHealth(
+        serverName: config.name,
+        transport: config.transport,
+        status: _status,
+        latency: stopwatch.elapsed,
+        tools: List.unmodifiable(_tools),
+        logs: List.unmodifiable(_logs),
+      );
+    } catch (error) {
+      stopwatch.stop();
+      return McpHealth(
+        serverName: config.name,
+        transport: config.transport,
+        status: McpConnectionStatus.failed,
+        latency: stopwatch.elapsed,
+        tools: List.unmodifiable(_tools),
+        logs: List.unmodifiable(_logs),
+        error: '$error',
+      );
+    }
   }
 
   static bool _isLoopback(Uri uri) {
@@ -315,6 +402,11 @@ class McpClient {
     }
     _pending.clear();
     _process = null;
+    if (_status == McpConnectionStatus.ready) {
+      _status = McpConnectionStatus.failed;
+      _lastError = 'MCP server stopped.';
+      _log(_lastError);
+    }
   }
 
   Future<void> dispose() async {
@@ -323,6 +415,8 @@ class McpClient {
       _httpClient = null;
       _sessionId = null;
       if (_injectedHttpClient == null) client?.close();
+      _status = McpConnectionStatus.disconnected;
+      _log('Disconnected');
       return;
     }
     final process = _process;
@@ -336,6 +430,14 @@ class McpClient {
     }
     if (process != null) await _terminateProcessTree(process);
     _closePending();
+    _status = McpConnectionStatus.disconnected;
+    _log('Disconnected');
+  }
+
+  void _log(String message) {
+    if (message.isEmpty) return;
+    _logs.add('${DateTime.now().toIso8601String()} $message');
+    if (_logs.length > 100) _logs.removeRange(0, _logs.length - 100);
   }
 
   static Future<void> _terminateProcessTree(Process process) async {
