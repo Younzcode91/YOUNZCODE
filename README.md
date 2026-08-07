@@ -1,115 +1,157 @@
-# YOUNZCODE
+<div align="center">
 
-Panduan pemasangan skill, plugin, MCP, dan extension tersedia di [`ADDONS_GUIDE.md`](ADDONS_GUIDE.md).
+<img src="assets/younzcode_logo_new.png" alt="YOUNZCODE" width="120"/>
 
-Aplikasi AI coding agent native untuk Windows, dibuat dengan Flutter. Aplikasi dapat membaca dan mencari kode, mengubah file, menjalankan PowerShell, serta meminta izin sebelum tindakan yang mengubah sistem.
+# YOUNZCODE 🤖
 
-Editor workspace menyediakan syntax highlighting, autocomplete lokal (`Ctrl+Space`), minimap, diagnostics dari toolchain bahasa, breakpoint gutter, serta Run/Debug console. Dart memakai Debug Adapter Protocol bawaan SDK. Python memakai `debugpy`. Node.js memakai standalone DAP server resmi Microsoft `js-debug` yang disertakan dalam installer; lokasi alternatif dapat ditentukan dengan `YOUNZCODE_JS_DEBUG`. Ketiganya mendukung breakpoint dan stepping nyata.
+**AI coding agent desktop untuk Windows.**
 
-Kontrol debugger: `F5` untuk mulai/lanjut, `F10` untuk step over, `F11` untuk step into, dan `Shift+F11` untuk step out.
+![Flutter](https://img.shields.io/badge/Flutter-3-0F766E?logo=flutter&logoColor=white&style=flat)
+![Dart](https://img.shields.io/badge/Dart-^3.11-0175C2?logo=dart&logoColor=white&style=flat)
+![Version](https://img.shields.io/badge/versi-1.3.5-16A34A?style=flat)
+![Platform](https://img.shields.io/badge/Platform-Windows-0EA5E9?style=flat)
+![Tests](https://img.shields.io/badge/test-33+%20file-16A34A?style=flat)
 
-## Fitur pengembangan
+Agen AI native yang membaca, mencari, dan mengubah kode di workspace-mu —
+menjalankan PowerShell, debugger, browser agent, MCP/add-on, checkpoint perubahan,
+dan quality gate otomatis. Semua tindakan yang mengubah sistem **selalu meminta izin dulu**.
 
-- Checkpoint perubahan tersimpan per workspace dan dapat dipulihkan dari Inspector.
-- Hybrid code intelligence menggabungkan pencarian istilah Indonesia/Inggris, symbol index, go-to-definition, references, dan autocomplete workspace.
-- Perintah `/agents tugas 1 | tugas 2` menjalankan beberapa agent secara paralel pada branch dan Git worktree yang terisolasi.
-- Perintah `/goal <tujuan>` menyimpan tujuan per chat dan menjalankan turn lanjutan otomatis sampai agent menandainya selesai atau terblokir. Staged edit dipertahankan sepanjang rangkaian goal.
-- Git Center mendukung status detail, stage/unstage, discard, commit, branch, merge/abort, push, serta pengelolaan worktree.
-- Add-on Manager menampilkan health check, latensi, log, dan kebijakan izin per tool MCP.
-- Provider mendukung urutan fallback, retry/failover, harga token, anggaran bulanan, dan dashboard `/usage`.
-- Respons provider kosong dicoba ulang otomatis dengan mode transport alternatif, serta tidak lagi ditampilkan sebagai kartu agent sukses tanpa isi.
-- Model Settings menempatkan API key sebelum Fetch, mengenali preset AgentRouter, dan menampilkan detail autentikasi yang berguna untuk HTTP 401.
-- Quality gate otomatis menjalankan analyzer atau test yang relevan setelah perubahan diterima, lalu menawarkan rollback bila gagal.
-- Lampiran chat membaca teks dari Markdown, PDF, DOCX, dan XLSX. PDF hasil scan tetap memerlukan OCR; format lama `.doc`/`.xls` perlu disimpan ulang sebagai `.docx`/`.xlsx`.
-- Perintah `/download URL` atau pesan seperti `tolong download URL` mengunduh media publik ke folder `downloads` workspace melalui yt-dlp, dengan validasi URL, konfirmasi hak akses, progres, dan pembatalan.
-- Agent Browser berbasis Microsoft Edge WebView2 dapat membuka URL HTTPS atau preview `localhost`, membaca halaman, klik, mengetik, upload file workspace, dan menyimpan screenshot. Upload serta aksi penting seperti delete/submit/publish/login selalu melewati approval.
-- Fondasi agent dipisahkan menjadi transport completion, sesi edit transaksional, routing provider, usage store, checkpoint store, dan quality gate agar lebih mudah diuji serta dikembangkan.
+</div>
 
-Shell aplikasi tetap berada di `lib/main.dart`, sedangkan workflow state dipisahkan ke `lib/app/`: lifecycle workspace, konfigurasi agent, browser, command, turn agent, serta session/editor/terminal. Service dan panel browser berada di file mandiri agar `main.dart` tidak kembali menumpuk. Semuanya memakai Dart `part` dalam satu library agar private state tetap tertutup tanpa membuat siklus import.
+---
 
-## Menjalankan
+## ✨ Fitur
+
+### 🖥️ Editor & Debugging
+- **Syntax highlighting**, autocomplete lokal (`Ctrl+Space`), minimap, diagnostics dari toolchain bahasa, dan breakpoint gutter
+- **Run/Debug console** dengan breakpoint & stepping nyata:
+  - **Dart** — Debug Adapter Protocol bawaan SDK
+  - **Python** — `debugpy`
+  - **Node.js** — standalone DAP resmi Microsoft `js-debug` (disertakan di installer; lokasi alternatif via `YOUNZCODE_JS_DEBUG`)
+- Kontrol: `F5` mulai/lanjut · `F10` step over · `F11` step into · `Shift+F11` step out
+
+### 🤖 Agen AI
+- **Multi-agent paralel** — `/agents tugas 1 | tugas 2` menjalankan beberapa agent pada branch & Git worktree terisolasi
+- **Goal mode** — `/goal <tujuan>` menyimpan tujuan per chat dan menjalankan turn lanjutan otomatis sampai selesai atau terblokir; staged edit dipertahankan
+- **Provider multi** — urutan fallback, retry/failover, harga token, anggaran bulanan, dan dashboard `/usage`
+- Respons provider kosong dicoba ulang otomatis dengan mode transport alternatif
+- **Model Settings** — API key dikirim sebelum Fetch, mengenali preset AgentRouter, detail autentikasi untuk HTTP 401
+
+### 🧠 Code Intelligence
+- **Hybrid**: pencarian istilah Indonesia/Inggris, symbol index, go-to-definition, references, dan autocomplete workspace
+- **Checkpoint perubahan** tersimpan per workspace, dapat dipulihkan dari Inspector
+
+### 🛡️ Keamanan
+- **API key hanya di memori** selama aplikasi berjalan — base URL, model, dan workspace disimpan sebagai preferensi lokal
+- File `.env` dan variannya berlabel **LOCAL ONLY** — agent AI tidak dapat membaca/mengubahnya
+- **Secret scanner** & kebijakan izin per tool; tindakan berisiko (delete, submit, publish, login, upload) **wajib approval**
+- **Workspace trust** — folder baru diminta persetujuan sebelum diakses
+
+### 🔌 Add-on & MCP
+- **Add-on Manager** — health check, latensi, log, dan kebijakan izin per tool MCP
+- Mendukung skill, plugin, MCP, dan extension — lihat [ADDONS_GUIDE.md](ADDONS_GUIDE.md)
+
+### 🖼️ Media & Browser
+- **Agent Browser** (Microsoft Edge WebView2) — buka URL HTTPS / preview `localhost`, baca halaman, klik, ketik, upload file workspace, simpan screenshot
+- **`/download URL`** — unduh media publik via yt-dlp dengan validasi URL, konfirmasi hak akses, progres, dan pembatalan
+- **Lampiran chat** — baca Markdown, PDF, DOCX, dan XLSX
+- **Image Studio** — generasi gambar berbasis AI
+
+### 💾 Workspace & Git
+- **Git Center** — status detail, stage/unstage, discard, commit, branch, merge/abort, push, dan pengelolaan worktree
+- **Terminal persisten** untuk menjalankan perintah shell
+- **Percakapan otomatis tersimpan** per workspace — `NEW CHAT` membuat sesi baru, menu `HISTORY` membuka/melanjutkan/menghapus (maks. 50 sesi terbaru)
+
+### ⚙️ Quality Gate & Update
+- **Quality gate otomatis** — menjalankan analyzer atau test relevan setelah perubahan diterima, menawarkan rollback bila gagal
+- **Update service** untuk pembaruan aplikasi
+
+---
+
+## 🧰 Teknologi
+
+| Lapisan | Teknologi |
+|---|---|
+| Framework | Flutter (desktop Windows) |
+| HTTP | http · dio-style requests via package `http` |
+| Browser agent | webview_windows (Edge WebView2) |
+| Ekstraksi dokumen | pdfrx (PDF), xml (DOCX), archive (XLSX) |
+| Keamanan | cryptography, secret scanner, workspace trust |
+| Animasi | lottie |
+| Skill pack | [`skills/graphify`](skills/graphify) — knowledge graph |
+
+---
+
+## 🚀 Menjalankan
+
+### Development
 
 ```powershell
-cd "C:\Users\F!DH0-PC\OneDrive\Dokumen\Default Project\kode_agent_desktop"
 flutter pub get
 flutter run -d windows
 ```
 
-Di aplikasi:
+**Pemakaian pertama:**
 
-1. Klik workspace di panel kiri dan pilih folder proyek.
-2. Klik ikon pengaturan di kanan atas.
-3. Isi base URL, model, dan API key.
-4. Tulis tugas pada kotak pesan.
+1. Klik **workspace** di panel kiri dan pilih folder proyek
+2. Klik ikon **pengaturan** di kanan atas
+3. Isi **base URL, model, dan API key**
+4. Tulis tugas pada kotak pesan
 
-API key hanya berada di memori selama aplikasi berjalan. Base URL, nama model, dan workspace disimpan sebagai preferensi lokal.
-
-File `.env` dan variannya dapat dibuka secara manual setelah konfirmasi keamanan. File tersebut diberi label `LOCAL ONLY`; tool agent AI tetap tidak dapat membaca atau mengubahnya.
-
-Percakapan disimpan otomatis secara lokal per workspace. Tombol `NEW CHAT` membuat sesi baru tanpa menghapus sesi sebelumnya; gunakan menu `HISTORY` untuk membuka, melanjutkan, atau menghapus percakapan lama. Maksimal 50 sesi terbaru disimpan.
-
-Gunakan `/goal tujuan yang ingin diselesaikan` untuk pekerjaan panjang. Statusnya tampil di atas pemilih model. Perintah `/goal status`, `/goal resume`, `/goal stop`, dan `/goal clear` mengelola goal aktif. Delapan kelanjutan otomatis diizinkan per batch; bila pekerjaan masih belum selesai, goal dijeda dengan checkpoint tetap tersimpan dan dapat dilanjutkan melalui `/goal resume`. Goal aktif yang dipulihkan setelah aplikasi dibuka ulang juga dijeda sampai pengguna memilih resume, agar pekerjaan dan biaya provider tidak berjalan tanpa sepengetahuan pengguna.
-
-Root file tree dapat dilipat dengan mengklik baris folder workspace. Composer memiliki `BUILD` mode dan `PLAN` mode; Plan Mode hanya menyediakan tool baca/search, menonaktifkan write, terminal, dan MCP eksternal, lalu meminta agent menghasilkan rencana tanpa mengubah sistem.
-
-Agent Browser dapat dibuka dari command rail, tab `Browser`, command palette, atau `/browser URL`. Browser memakai profil khusus di `%LOCALAPPDATA%\YOUNZCODE\AgentBrowser`, terpisah dari profil Edge pribadi. Situs publik wajib HTTPS; HTTP hanya diizinkan untuk preview `localhost`. Microsoft Edge WebView2 Runtime diperlukan.
-
-Saat Agent Browser dibuka otomatis oleh tool, aplikasi kembali ke chat setelah turn selesai agar jawaban langsung terlihat. Buka/read/klik aman tidak menampilkan approval; upload, submit, password, delete, publish, pembayaran, dan aksi penting lain tetap meminta konfirmasi.
-
-Menu `ADD-ONS` dapat mengimpor file atau folder lokal:
-
-- OpenCode/Claude `SKILL.md`: aktif sebagai instruksi agent.
-- Plugin YOUNZCODE JSON: field `prompt` atau `instructions` aktif; kode plugin tidak dijalankan otomatis.
-- MCP JSON: server stdio aktif sebagai dynamic tools. Konfigurasi HTTP disimpan tetapi belum dieksekusi pada versi ini.
-- VSIX: dapat disimpan, diaktifkan/dinonaktifkan, dan dihapus; extension yang membutuhkan VS Code Extension Host tidak dijalankan.
-
-Add-on disalin ke `%LOCALAPPDATA%\\YOUNZCODE\\addons`, tidak dijalankan saat proses import, dan dapat dikelola dari Add-on Manager. MCP stdio yang diaktifkan berjalan dengan izin pengguna Windows, sehingga hanya aktif di BUILD mode.
-
-## Provider
-
-Konfigurasi OpenAI:
-
-- Base URL: `https://api.openai.com/v1`
-- Model: model yang mendukung function/tool calling
-
-Provider lain dapat digunakan jika endpoint-nya kompatibel dengan OpenAI Chat Completions dan mendukung tool calling.
-
-Endpoint native Anthropic dan Gemini juga dikenali otomatis. Tambahkan beberapa Base URL fallback di Model Settings untuk failover berurutan. Harga input/output per satu juta token dan anggaran token bulanan bersifat opsional; statistik pemakaian dapat dibuka dengan `/usage`.
-
-## Build Windows
+### Release build
 
 ```powershell
 flutter build windows --release
 ```
 
-Hasil aplikasi berada di:
+Hasilnya di `build\windows\x64\runner\Release\YOUNZCODE.exe` — distribusikan **seluruh isi folder Release** (bukan hanya `.exe`), karena aplikasi memerlukan DLL dan data Flutter.
 
-```text
-build\windows\x64\runner\Release\YOUNZCODE.exe
-```
+> Catatan: Flutter Windows menolak karakter `!` pada path proyek. Jika perlu build ulang, salin proyek ke path tanpa karakter tersebut, mis. `C:\kode_agent_build`.
 
-Bundle release yang sudah dibuat juga tersedia langsung di:
+### Installer
 
-```text
-release\YOUNZCODE.exe
-```
-
-Distribusikan seluruh isi folder `Release`, bukan hanya file `.exe`, karena aplikasi memerlukan DLL dan data Flutter di folder tersebut.
-
-## Installer Windows
-
-Installer Inno Setup yang sudah dikompilasi tersedia di:
-
-```text
-  installer\output\YOUNZCODE-Setup-1.3.5.exe
-```
-
-Untuk membangun ulang installer:
+Installer Inno Setup yang sudah dikompilasi tersedia di `installer\output\YOUNZCODE-Setup-1.3.5.exe`. Membangun ulang:
 
 ```powershell
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\YOUNZCODE.iss"
 ```
 
-Catatan: Flutter Windows menolak karakter `!` pada path proyek. Jika perlu membangun ulang pada komputer ini, salin proyek sementara ke path tanpa karakter tersebut, misalnya `C:\kode_agent_build`, lalu jalankan perintah build dari sana.
+Bundle installer menyertakan `tools\yt-dlp.exe` dan `tools\ffmpeg.exe`. Untuk development build, keduanya juga bisa tersedia di `PATH`; lokasi alternatif via `YOUNZCODE_YTDLP` dan `YOUNZCODE_FFMPEG`.
 
-Bundle installer menyertakan `tools\yt-dlp.exe` dan `tools\ffmpeg.exe`. Untuk development build, keduanya juga dapat tersedia di `PATH`; lokasi alternatif dapat ditentukan dengan `YOUNZCODE_YTDLP` dan `YOUNZCODE_FFMPEG`.
+---
+
+## 📁 Struktur Project
+
+```
+lib/
+├── main.dart                  # Shell aplikasi
+├── app/                       # Workflow state: workspace lifecycle, konfigurasi agent,
+│                              #   browser, command, goal, turn agent, session/editor/terminal
+├── services/                  # 30+ service: git, MCP client, provider routing & usage,
+│                              #   debug adapter, quality gate, code intelligence, checkpoint,
+│                              #   secret scanner, workspace trust, update, media download
+├── models/                    # Chat session, addon, agent goal, workspace change
+├── ui/                        # Editor, browser panel, inspector, image studio, dialogs, overlays
+├── skills/                    # Skill pack (graphify)
+├── installer/                 # Inno Setup (YOUNZCODE.iss)
+└── test/                      # 33+ file unit test + integration test (browser smoke)
+```
+
+---
+
+## 🧪 Pengujian
+
+```bash
+flutter test
+flutter test integration_test/browser_windows_smoke_test.dart -d windows
+```
+
+---
+
+## 📄 Dokumentasi
+
+- [ADDONS_GUIDE.md](ADDONS_GUIDE.md) — panduan pemasangan skill, plugin, MCP, dan extension
+
+---
+
+*Dibuat dengan ☕ dan Flutter — dari tanah Besemah.*
