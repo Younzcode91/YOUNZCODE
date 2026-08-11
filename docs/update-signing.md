@@ -166,26 +166,31 @@ re-verify them whenever a key is touched.
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which automates the
 whole signing part of a release:
 
-1. **Validate preparation** — the tag version must already be baked into
+1. **Tag-sync invariant** — the tag must sit exactly on the tip of both `main`
+   and the manifest branch, and its tree must carry the release workflows
+   (`tool/check_tag_sync.dart`, run as an early step in `release-gate.yml` and
+   as a fail-fast in `release.yml`). A tag that drifted from either branch
+   would build a release that disagrees with the published manifest.
+2. **Validate preparation** — the tag version must already be baked into
    `pubspec.yaml`, `lib/main.dart`, and `installer/YOUNZCODE.iss`; the signing
    backup receipt must be fresh and committed. Fails fast otherwise.
-2. **Build** — `flutter build windows --release`, stage the `release/` folder,
+3. **Build** — `flutter build windows --release`, stage the `release/` folder,
    and compile the Inno Setup installer.
-3. **Hash** — SHA-256 of the installer.
-4. **Manifest** — append the new release entry to `updates.json`.
-5. **Sign** — restore the private keys from repository secrets
+4. **Hash** — SHA-256 of the installer.
+5. **Manifest** — append the new release entry to `updates.json`.
+6. **Sign** — restore the private keys from repository secrets
    (`UPDATE_SIGNING_KEY`, optional `UPDATE_SIGNING_KEY_2` — the content of the
    matching `tool/signing/update_signing_key*.txt` files, base64 seeds) and run
    `sign_update.dart --key ...`. **To retire a key, delete its secret**: the
    next release is then signed with the surviving key(s) only.
-6. **Verify** — `tool/e2e_update_check.dart --manifest updates.json
+7. **Verify** — `tool/e2e_update_check.dart --manifest updates.json
    --expect-version <tag>` checks the signed manifest against the baked-in key
    ring before anything is published; the signing-related test suites run.
-7. **Publish** — commit `updates.json` to the manifest branch (default: the
+8. **Publish** — commit `updates.json` to the manifest branch (default: the
    repo default branch, matching `updateManifestUrl`; override with the
    `MANIFEST_BRANCH` repo variable) using a fast-forward-only push, and create
    the GitHub release with the installer attached (`gh release create`).
-8. **Live E2E** — the real in-app path is checked against the published
+9. **Live E2E** — the real in-app path is checked against the published
    manifest and release asset, with retries for CDN propagation.
 
 The private keys themselves never appear in the repo, logs, or artifacts — only
@@ -199,6 +204,9 @@ Manual releases (or pre-tag preparation for the pipeline):
 - [ ] Encrypted `.gpg` copy exists in `tool/signing/backup/` and decrypts
 - [ ] Passphrase stored in the password manager
 - [ ] `.ci/signing-backup-receipt.json` updated and committed
+- [ ] Tag sync check passes — `dart run tool/check_tag_sync.dart --tag vX.Y.Z
+      --main main --branch <cabang-manifest>` (tag == main == manifest branch,
+      workflows present at the tag)
 - [ ] Release gate (`.github/workflows/release-gate.yml`) passes on the `v*` tag
 - [ ] `dart run tool/sign_update.dart` (add `--key` per rotation key) — manifest
       signed, no warnings, `signatures` array populated

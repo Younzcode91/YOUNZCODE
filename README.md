@@ -174,6 +174,8 @@ Push tag `vX.Y.Z` (mis. `v1.3.7`) memicu `.github/workflows/release.yml`: memban
 
 Sebelum men-tag, pastikan versi sudah di-bump di `pubspec.yaml`, `lib/main.dart`, dan `installer/YOUNZCODE.iss`, serta receipt backup kunci segar sudah di-commit (`.ci/signing-backup-receipt.json`). Pipeline memvalidasi semuanya dan gagal cepat bila ada yang belum disiapkan. Lihat `docs/update-signing.md` untuk detail secret dan alur.
 
+**Tag itu sendiri adalah artefak rilis** — tag `vX.Y.Z` harus berada tepat di ujung `main` DAN cabang manifest (cabang yang melayani `updates.json`), serta memuat workflow rilis. Invariant ini diperiksa otomatis oleh `tool/check_tag_sync.dart` (jalankan lokal: `dart run tool/check_tag_sync.dart --tag vX.Y.Z --main main --branch <cabang-manifest>`), sebagai langkah awal di `release-gate.yml` setiap tag, dan sebagai fail-fast sebelum build di `release.yml`. Bila tag menunjuk komit yang berbeda dari salah satu cabang, atau pohonnya tidak memuat `release.yml`/`release-gate.yml`/`workflow-lint.yml`, pipeline tidak akan rilis: merge/ff rilis ke `main`, pastikan cabang manifest di komit yang sama, baru tag.
+
 **Pengaman workflow**: GitHub diam-diam mengabaikan workflow yang YAML-nya tidak bisa di-parse (pipeline rilis tidak akan pernah jalan, tanpa error). Untuk mencegahnya: (1) pasang hook lokal sekali dengan `bash tool/install_git_hooks.sh` — hook `pre-push` menolak push tag `v*` bila ada `.github/workflows/*.yml` yang rusak; (2) CI menjalankan cek yang sama via `.github/workflows/workflow-lint.yml` (setiap push/PR) dan sebagai langkah pertama `release-gate.yml` (setiap tag). Validator: `dart run tool/check_workflows.dart`.
 
 ---

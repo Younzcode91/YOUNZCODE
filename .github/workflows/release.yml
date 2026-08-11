@@ -95,6 +95,22 @@ jobs:
           dart run tool/check_backup_receipt.dart \
             --receipt .ci/signing-backup-receipt.json
 
+      - name: Check tag / main / manifest-branch sync
+        shell: bash
+        env:
+          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          # Fail fast before the expensive build: the tag must sit exactly on
+          # the tip of main and the manifest branch (the invariant the
+          # publish step's fast-forward safety relies on) and carry the
+          # release workflows.
+          git fetch origin --tags --prune
+          dart run tool/check_tag_sync.dart \
+            --tag "v$VER" \
+            --main main \
+            --branch "$MANIFEST_BRANCH"
+
       - name: Build Windows release
         shell: bash
         run: flutter build windows --release
