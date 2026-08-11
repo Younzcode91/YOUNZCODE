@@ -235,7 +235,8 @@ jobs:
           bash tool/build_tools.sh
           flutter analyze
           flutter test test/security_update_test.dart \
-            test/backup_receipt_test.dart test/retire_signing_key_test.dart
+            test/backup_receipt_test.dart test/retire_signing_key_test.dart \
+            test/bundled_integrations_test.dart
 
       - name: Publish updates.json through a protected-branch PR
         shell: bash
