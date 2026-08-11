@@ -118,6 +118,12 @@ AppUpdate _baseUpdate({String version = '2.0.0'}) => AppUpdate(
 );
 
 void main() {
+  test('manifest update publik dilayani dari branch main', () {
+    expect(
+      updateManifestUrl,
+      'https://raw.githubusercontent.com/Younzcode91/YOUNZCODE/main/updates.json',
+    );
+  });
   test('secret scanner meredaksi credential umum', () {
     const source = 'api_key=sk-abcdefghijklmnopqrstuvwxyz123456\n';
     final redacted = SecretScanner.redact(source);

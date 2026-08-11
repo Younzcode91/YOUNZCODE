@@ -40,6 +40,12 @@ Future<Directory> _workflowDir() async {
 }
 
 void main() {
+  test('release memirror manifest ke branch legacy untuk klien lama', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    expect(workflow, contains('Mirror manifest for pre-main clients'));
+    expect(workflow, contains('LEGACY_MANIFEST_BRANCH: feature/multiprovider-and-polish'));
+    expect(workflow, contains('origin/\$SOURCE:\$LEGACY'));
+  });
   test('semua workflow repo valid', () async {
     final result = await _check('.github/workflows');
     expect(result.exitCode, 0, reason: '${result.stdout}\n${result.stderr}');

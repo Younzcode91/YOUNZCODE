@@ -30,7 +30,8 @@ import 'package:kode_agent_desktop/services/process_launch.dart';
   if (binary.existsSync()) {
     return (binary.path, args);
   }
-  final resolved = resolveProcessLaunch('dart', ['run', toolPath, ...args]);
+  final source = File('${_packageRoot()}$sep$toolPath').absolute.path;
+  final resolved = resolveProcessLaunch('dart', ['run', source, ...args]);
   return (resolved.executable, resolved.arguments);
 }
 
