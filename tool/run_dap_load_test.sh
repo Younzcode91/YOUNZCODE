@@ -66,7 +66,16 @@ if [ -z "$WORKERS" ]; then
 fi
 
 echo "==> CPU stress: $WORKERS worker(s) while DAP tests run (timeout $DAP_TIMEOUT each)."
-dart run tool/cpu_stress.dart "$WORKERS" --sentinel "$SENTINEL" >/dev/null 2>&1 &
+# Prefer the precompiled stressor (tool/build_tools.sh); dart run pays ~5-7s
+# of build hooks + JIT compile before the burners even spin up.
+if [ -f "build/tools/cpu_stress.exe" ]; then
+  STRESS_CMD=( "build/tools/cpu_stress.exe" "$WORKERS" --sentinel "$SENTINEL" )
+elif [ -f "build/tools/cpu_stress" ]; then
+  STRESS_CMD=( "build/tools/cpu_stress" "$WORKERS" --sentinel "$SENTINEL" )
+else
+  STRESS_CMD=( dart run tool/cpu_stress.dart "$WORKERS" --sentinel "$SENTINEL" )
+fi
+"${STRESS_CMD[@]}" >/dev/null 2>&1 &
 STRESS_PID=$!
 
 # Let the workers spin up so the tests start under full contention.

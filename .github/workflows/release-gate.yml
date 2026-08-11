@@ -1,0 +1,85 @@
+name: Release gate - signing backup
+
+# Every release must be backed up before it is signed. This gate runs on
+# version tags (v*) and fails the run when the signing-key backup receipt
+# (.ci/signing-backup-receipt.json) is missing, stale (older than
+# BACKUP_MAX_AGE_DAYS, default 30), or out of sync with the trusted keys baked
+# into the app — prompting a fresh backup before any manifest is signed.
+#
+# The receipt holds only fingerprints and timestamps, never key material: it
+# is produced by `dart run tool/backup_signing_key.dart` (which also writes
+# the password-manager entry and the encrypted offline copy), and must be
+# committed alongside the backup. The actual private key never enters CI.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  verify-signing-backup:
+    name: Verify signing-key backup receipt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history + tags so a retirement can be validated against the
+          # previous release tag.
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Check backup receipt (missing / stale / out-of-sync)
+        shell: bash
+        env:
+          BACKUP_MAX_AGE_DAYS: ${{ vars.BACKUP_MAX_AGE_DAYS || '30' }}
+        run: |
+          set -euo pipefail
+          dart tool/check_backup_receipt.dart \
+            --receipt .ci/signing-backup-receipt.json \
+            --max-age-days "$BACKUP_MAX_AGE_DAYS"
+
+      - name: Validate key retirement vs previous release
+        shell: bash
+        # If this release drops a key from updateSigningPublicKeys relative to
+        # the previous tag, it must satisfy the retire preconditions (nightly
+        # margin history fresh + enough rows, surviving key verifies the
+        # manifest). Catches retirements that skip the retire-key workflow.
+        run: |
+          set -euo pipefail
+          PREV_TAG="$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)"
+          if [ -z "$PREV_TAG" ]; then
+            echo "No previous release tag - nothing to validate."
+            exit 0
+          fi
+          extract_keys() {
+            sed -n '/updateSigningPublicKeys = <String>\[/,/^\];/p' "$1" \
+              | grep -oE "'[A-Za-z0-9+/]{40,}={0,2}'" | tr -d "'"
+          }
+          CURRENT="$(mktemp)"
+          PREV="$(mktemp)"
+          trap 'rm -f "$CURRENT" "$PREV" /tmp/prev_service.dart' EXIT
+          extract_keys lib/services/update_service.dart > "$CURRENT"
+          if ! git show "$PREV_TAG:lib/services/update_service.dart" \
+              > /tmp/prev_service.dart 2>/dev/null; then
+            echo "Previous tag has no service file - nothing to validate."
+            exit 0
+          fi
+          extract_keys /tmp/prev_service.dart > "$PREV"
+          RETIRED=0
+          while IFS= read -r key; do
+            if ! grep -qxF "$key" "$CURRENT"; then
+              echo "Detected retired key vs $PREV_TAG: $key"
+              dart tool/retire_signing_key.dart \
+                --retire "$key" --history .ci/dap-load-history.csv
+              RETIRED=1
+            fi
+          done < "$PREV"
+          if [ "$RETIRED" = "0" ]; then
+            echo "No key retired in this release."
+          fi
+          echo "Retirement validation PASS"

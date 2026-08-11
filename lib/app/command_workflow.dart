@@ -160,6 +160,8 @@ extension _CommandWorkflow on _AgentHomePageState {
         _showMessage('Build Mode diaktifkan.');
       case '/update':
         await _checkForUpdates();
+      case '/update-status':
+        await _openUpdateDiagnostics();
       default:
         _addLocalResponse(
           'Command "$command" tidak dikenal. Gunakan "/help" untuk melihat daftar command.',

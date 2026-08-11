@@ -43,6 +43,7 @@ import 'services/multi_agent_service.dart';
 import 'services/workspace_trust_service.dart';
 import 'services/persistent_terminal_service.dart';
 import 'services/quality_gate_service.dart';
+import 'services/update_ping_service.dart';
 import 'services/update_service.dart';
 import 'services/workspace_checkpoint_store.dart';
 import 'services/workspace_tools.dart';
@@ -55,6 +56,7 @@ part 'app/command_workflow.dart';
 part 'app/goal_workflow.dart';
 part 'app/media_document_workflow.dart';
 part 'app/session_workspace_workflow.dart';
+part 'app/update_diagnostics.dart';
 part 'app/update_workflow.dart';
 part 'app/workspace_lifecycle.dart';
 part 'ui/chrome.dart';
@@ -68,7 +70,7 @@ part 'ui/overlays.dart';
 const _fastMotion = Duration(milliseconds: 140);
 const _mediumMotion = Duration(milliseconds: 240);
 const _motionCurve = Curves.easeOutCubic;
-const _appVersion = '1.3.6';
+const _appVersion = '1.3.7';
 const _silkyScrollConfig = SilkyScrollConfig(
   silkyScrollDuration: Duration(milliseconds: 700),
   animationCurve: Curves.easeOutCubic,
@@ -155,6 +157,11 @@ const _slashCommands = <_SlashCommand>[
     '/update',
     'Check for application updates',
     Icons.system_update_alt,
+  ),
+  _SlashCommand(
+    '/update-status',
+    'Show update & signing diagnostics',
+    Icons.verified_outlined,
   ),
 ];
 
@@ -358,6 +365,15 @@ class _AgentHomePageState extends State<AgentHomePage> {
   final _providerUsageStore = ProviderUsageStore();
   final _qualityGateService = QualityGateService();
   final _updateService = const UpdateService();
+  final _updatePingService = UpdatePingService();
+  bool _updatePingEnabled = true;
+  String _installId = '';
+  // Update diagnostics (surfaced via /update-status and Model Settings):
+  // which key verified the last update check and when it ran.
+  DateTime? _lastUpdateCheckAt;
+  String? _lastUpdateCheckResult;
+  String? _lastVerifiedSigningKey;
+  int? _lastUpdateCheckMs;
   final _checkpointStore = WorkspaceCheckpointStore();
   final _documentExtractionService = DocumentExtractionService();
   final _mediaDownloadService = MediaDownloadService();

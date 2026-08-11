@@ -1,5 +1,5 @@
 #define MyAppName "YOUNZCODE"
-#define MyAppVersion "1.3.6"
+#define MyAppVersion "1.3.7"
 #define MyAppPublisher "YOUNZCODE"
 #define MyAppExeName "YOUNZCODE.exe"
 

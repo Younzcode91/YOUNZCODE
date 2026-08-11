@@ -8,7 +8,7 @@
 
 ![Flutter](https://img.shields.io/badge/Flutter-3-0F766E?logo=flutter&logoColor=white&style=flat)
 ![Dart](https://img.shields.io/badge/Dart-^3.11-0175C2?logo=dart&logoColor=white&style=flat)
-![Version](https://img.shields.io/badge/versi-1.3.6-16A34A?style=flat)
+![Version](https://img.shields.io/badge/versi-1.3.7-16A34A?style=flat)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0EA5E9?style=flat)
 ![Tests](https://img.shields.io/badge/test-33+%20file-16A34A?style=flat)
 
@@ -64,7 +64,7 @@ dan quality gate otomatis. Semua tindakan yang mengubah sistem **selalu meminta 
 
 ### ⚙️ Quality Gate & Update
 - **Quality gate otomatis** — menjalankan analyzer atau test relevan setelah perubahan diterima, menawarkan rollback bila gagal
-- **Update service** — periksa pembaruan via `/update` atau tombol *CHECK FOR UPDATES* di Model Settings; manifest HTTPS + host allowlist + tanda tangan **Ed25519** + checksum **SHA-256**, installer diunduh dan diverifikasi sebelum dijalankan
+- **Update service** — periksa pembaruan via `/update` atau tombol *CHECK FOR UPDATES* di Model Settings; manifest HTTPS + host allowlist + tanda tangan **Ed25519** + checksum **SHA-256**, installer diunduh dan diverifikasi sebelum dijalankan. Diagnostik update & penandatanganan (`/update-status` atau tombol *UPDATE DIAGNOSTICS*) menampilkan kunci yang dipercaya, kunci mana yang memverifikasi pemeriksaan terakhir, dan latensinya. **Telemetri adopsi** (`UpdatePingService`): aplikasi melaporkan versi terpasang ke endpoint yang dikonfigurasi (HTTPS + host allowlist, rate-limited, tanpa data pribadi, bisa dimatikan di Project Settings → *UPDATE TELEMETRY*) agar gate retire memakai adopsi fleet nyata, bukan proksi
 
 #### Menerbitkan pembaruan
 
@@ -77,13 +77,44 @@ dan quality gate otomatis. Semua tindakan yang mengubah sistem **selalu meminta 
    (private key di `tool/signing/update_signing_private_key.txt` — jangan pernah di-commit)
 4. Push `updates.json`; pengguna akan melihat tawaran pembaruan
 
-Jika keypair perlu dibuat ulang (backup private key lama sebelum diganti):
+> **Backup & recovery kunci penandatanganan** (wajib dibaca sebelum rilis):
+> lihat [docs/update-signing.md](docs/update-signing.md) — cara backup ke
+> password manager + vault offline (`dart run tool/backup_signing_key.dart`),
+> verifikasi backup, dan langkah pemulihan bila kunci hilang.
+
+Setiap rilis (tag `v*`) digate oleh **release gate** (`.github/workflows/release-gate.yml`):
+jalankan `dart run tool/backup_signing_key.dart` (menulis receipt commit-safe
+`.ci/signing-backup-receipt.json` berisi fingerprint + timestamp, tanpa material
+kunci) dan commit receipt-nya. Gate gagal bila receipt hilang, lebih tua dari
+`BACKUP_MAX_AGE_DAYS` (default 30 hari, bisa diubah lewat repo variable), atau
+tidak sinkron dengan kunci di `updateSigningPublicKeys`.
+
+**Rotasi kunci** berjalan lewat update biasa (`UpdateService` memercayai daftar
+kunci `updateSigningPublicKeys`): tambahkan public key baru ke daftar, lalu
+bubuhkan tanda tangan dari kedua kunci pada rilis transisi:
 
 ```powershell
-dart run tool/update_keys.dart
+dart run tool/update_keys.dart tool/signing/update_signing_key_new.txt
 ```
 
-Lalu tempel public key baru ke konstanta `updateSigningPublicKey` di `lib/services/update_service.dart`.
+```powershell
+dart run tool/sign_update.dart --key tool/signing/update_signing_private_key.txt --key tool/signing/update_signing_key_new.txt
+```Setelah pengguna mengejar ke rilis tersebut, tandatangani hanya dengan kunci baru
+dan hapus kunci lama dari daftar. Rilis lama tetap diverifikasi via field
+`signature`/`signatures` yang sesuai.
+
+**Retire kunci lama** dilakukan lewat workflow `retire-key.yml` (manual
+dispatch). Prekondisi: kunci tersisa harus tetap memverifikasi manifest, ring
+tidak boleh kosong, dan — yang utama — **adopsi fleet**. Bila telemetri ping
+update tersedia (`.ci/update-pings.csv`, dikumpulkan workflow `ping-collect.yml`
+dari endpoint yang di-deploy — lihat `tool/ping_server.dart`), retire hanya
+lolos bila rasio install unik yang sudah memakai versi target (`--adoption-version`,
+default rilis terbaru) dalam jendela `--adoption-window-days` (default 30 hari)
+≥ `--min-adoption-ratio` (default 0.9). Tanpa data ping, alat memakai proksi
+riwayat margin malam (baris ≥ 14 dan segar ≤ 7 hari) agar gate tetap bekerja
+sebelum telemetri aktif. Bila lolos, kunci dihapus dari
+`updateSigningPublicKeys`, diuji, dan di-commit; release gate juga memvalidasi
+retire apa pun yang terdeteksi dibanding tag rilis sebelumnya.
 
 ---
 
@@ -129,13 +160,19 @@ Hasilnya di `build\windows\x64\runner\Release\YOUNZCODE.exe` — distribusikan *
 
 ### Installer
 
-Installer Inno Setup yang sudah dikompilasi tersedia di `installer\output\YOUNZCODE-Setup-1.3.6.exe`. Membangun ulang:
+Installer Inno Setup yang sudah dikompilasi tersedia di `installer\output\YOUNZCODE-Setup-1.3.7.exe`. Membangun ulang:
 
 ```powershell
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\YOUNZCODE.iss"
 ```
 
 Bundle installer menyertakan `tools\yt-dlp.exe` dan `tools\ffmpeg.exe`. Untuk development build, keduanya juga bisa tersedia di `PATH`; lokasi alternatif via `YOUNZCODE_YTDLP` dan `YOUNZCODE_FFMPEG`.
+
+### Release otomatis (pipeline)
+
+Push tag `vX.Y.Z` (mis. `v1.3.7`) memicu `.github/workflows/release.yml`: membangun installer Windows, menghitung SHA-256, menambahkan entri ke `updates.json`, menandatanganinya dengan kunci penandatanganan yang di-restore dari **secrets** (`UPDATE_SIGNING_KEY` dan opsional `UPDATE_SIGNING_KEY_2`), memverifikasi manifest terhadap key ring bawaan, memublikasikan `updates.json` ke cabang manifest, dan membuat GitHub release dengan installer terlampir.
+
+Sebelum men-tag, pastikan versi sudah di-bump di `pubspec.yaml`, `lib/main.dart`, dan `installer/YOUNZCODE.iss`, serta receipt backup kunci segar sudah di-commit (`.ci/signing-backup-receipt.json`). Pipeline memvalidasi semuanya dan gagal cepat bila ada yang belum disiapkan. Lihat `docs/update-signing.md` untuk detail secret dan alur.
 
 ---
 
@@ -163,6 +200,16 @@ lib/
 ```bash
 flutter test
 flutter test integration_test/browser_windows_smoke_test.dart -d windows
+```
+
+**Precompile tool CLI** (sekali saja, atau setelah mengubah `tool/*.dart`):
+`dart run` membayar ~5–7 detik build hooks + kompilasi JIT tiap pemanggilan;
+`tool/build_tools.sh` mengompilasi semua tool ke `build/tools/` (AOT,
+~80 ms per jalankan). Test CLI dan script memakai binary ter-kompilasi saat
+ada dan jatuh kembali ke `dart run` bila tidak — build bersifat opsional:
+
+```bash
+bash tool/build_tools.sh
 ```
 
 **Load test debug adapter (CI: `.github/workflows/dap-load-test.yml`):**

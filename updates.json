@@ -7,7 +7,35 @@
       "notes": "Rilis 1.3.6: mekanisme update bertanda tangan Ed25519 dengan pemeriksaan otomatis (Model Settings); debug adapter lebih andal — timeout handshake dapat diatur dari Project Settings dan watchdog menampilkan diagnostik saat sesi gagal; peluncuran proses tanpa shell (aman untuk nama file berisi & dan spasi); worker /agents dikurung ke worktree-nya; load test debug adapter di CI.",
       "download_url": "https://github.com/Younzcode91/YOUNZCODE/releases/download/v1.3.6/YOUNZCODE-Setup-1.3.6.exe",
       "sha256": "1e41101cd941f96e33d1d65a42acafe0ef5c892c083fdff69b9653bef31a083b",
-      "signature": "ozJP2EQDYv6Z9TvKtrSO+pdvWxqS/n6m3o4OerhhvYYoPhF1xRv38aRYVH6uuNogt1Enkze8HzPZJ45D3mxJBw=="
+      "signature": "ozJP2EQDYv6Z9TvKtrSO+pdvWxqS/n6m3o4OerhhvYYoPhF1xRv38aRYVH6uuNogt1Enkze8HzPZJ45D3mxJBw==",
+      "signatures": [
+        {
+          "public_key": "sCshyfPyPgyUnsmtc3fK1oWeTXj2szd3sckqv5R/0eU=",
+          "signature": "ozJP2EQDYv6Z9TvKtrSO+pdvWxqS/n6m3o4OerhhvYYoPhF1xRv38aRYVH6uuNogt1Enkze8HzPZJ45D3mxJBw=="
+        },
+        {
+          "public_key": "KRtmNU7aHdQ2tkrylk8wdO6D7iamMpuORru4q7FDBdA=",
+          "signature": "RxKiaQeoP2LcgLQRXVWfZIxoGr+zfQKcoNq5lq4S6YJCrBlV3hqBPTYtsFxzFcMt5lVU3OMbogeB6Fe2g8bTCA=="
+        }
+      ]
+    },
+    {
+      "version": "1.3.7",
+      "channel": "stable",
+      "notes": "Rilis 1.3.7: key ring penandatanganan ganda (Ed25519) — manifest ditandatangani dua kunci, kunci lama tetap menjadi legacy field untuk klien pra-ring; diagnostik update di aplikasi (/update-status) menampilkan kunci yang memverifikasi pembaruan terakhir, hasil pemeriksaan, dan latensi; telemetri update opt-in (ping adopsi fleet untuk gate retire kunci).",
+      "download_url": "https://github.com/Younzcode91/YOUNZCODE/releases/download/v1.3.7/YOUNZCODE-Setup-1.3.7.exe",
+      "sha256": "7abc9dbdc73e4c5f6403be6446c51bfb95f583fc80e08d62260dccf8486adc4b",
+      "signature": "0rhsKydvJqwsCdTnNp7dxm75CZdvzVXQqrOWCqEfwI9/yvBN2VAi1NznP4nXTBRDIHp6CWaEucvnBPw3mlbbBw==",
+      "signatures": [
+        {
+          "public_key": "sCshyfPyPgyUnsmtc3fK1oWeTXj2szd3sckqv5R/0eU=",
+          "signature": "0rhsKydvJqwsCdTnNp7dxm75CZdvzVXQqrOWCqEfwI9/yvBN2VAi1NznP4nXTBRDIHp6CWaEucvnBPw3mlbbBw=="
+        },
+        {
+          "public_key": "KRtmNU7aHdQ2tkrylk8wdO6D7iamMpuORru4q7FDBdA=",
+          "signature": "XOcT9ULoV/mkLoscnBdUP4Puxj1xGETnmLi6qm5qvnFUt6zKjRhg8hf0pErS/EPmzaT4lGIRFcSHTnj/8MBvCg=="
+        }
+      ]
     }
   ]
 }

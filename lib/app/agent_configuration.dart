@@ -17,6 +17,7 @@ extension _AgentConfiguration on _AgentHomePageState {
       monthlyTokenBudget: _monthlyTokenBudget,
       qualityGateEnabled: _qualityGateEnabled,
       dapTimeoutMs: _dapTimeoutMs,
+      updatePingEnabled: _updatePingEnabled,
     ),
   );
 
@@ -414,6 +415,7 @@ extension _AgentConfiguration on _AgentHomePageState {
         outputCostPerMillion: _outputCostPerMillion,
         monthlyTokenBudget: _monthlyTokenBudget,
         onCheckForUpdates: _checkForUpdates,
+        onShowUpdateDiagnostics: _openUpdateDiagnostics,
       ),
     );
     if (result == null) return;
@@ -485,6 +487,7 @@ extension _AgentConfiguration on _AgentHomePageState {
         allowWrite: _allowWrite,
         allowTerminal: _allowTerminal,
         qualityGateEnabled: _qualityGateEnabled,
+        updatePingEnabled: _updatePingEnabled,
         approvalMode: _approvalMode,
         environment: _environment,
         baseUrl: _baseUrl,
@@ -498,6 +501,7 @@ extension _AgentConfiguration on _AgentHomePageState {
               write,
               terminal,
               qualityGateEnabled,
+              updatePingEnabled,
               approvalMode,
               variables,
               api,
@@ -512,6 +516,7 @@ extension _AgentConfiguration on _AgentHomePageState {
                 _allowWrite = write;
                 _allowTerminal = terminal;
                 _qualityGateEnabled = qualityGateEnabled;
+                _updatePingEnabled = updatePingEnabled;
                 _approvalMode = approvalMode;
                 _environment
                   ..clear()

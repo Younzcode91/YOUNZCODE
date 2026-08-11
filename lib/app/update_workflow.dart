@@ -6,29 +6,63 @@ extension _UpdateWorkflow on _AgentHomePageState {
   /// button in Model Settings.
   Future<void> _checkForUpdates() async {
     if (_updateChecking) return;
-    _updateState(() => _updateChecking = true);
+    _updateState(() {
+      _updateChecking = true;
+      _lastUpdateCheckAt = DateTime.now();
+      _lastUpdateCheckResult = 'memeriksa...';
+      _lastUpdateCheckMs = null;
+    });
     _showMessage('Memeriksa pembaruan...');
     try {
-      final update = await _updateService.check(currentVersion: _appVersion);
+      final update = await _updateService.check(
+        currentVersion: _appVersion,
+        onVerified: (key) {
+          if (mounted) _updateState(() => _lastVerifiedSigningKey = key);
+        },
+        onLatency: (elapsed) {
+          if (mounted) {
+            _updateState(() => _lastUpdateCheckMs = elapsed.inMilliseconds);
+          }
+        },
+      );
       if (!mounted) return;
       if (update == null) {
+        _updateState(
+          () => _lastUpdateCheckResult = 'up-to-date ($_appVersion)',
+        );
         _showMessage('YOUNZCODE $_appVersion sudah versi terbaru.');
         return;
       }
+      _updateState(
+        () => _lastUpdateCheckResult =
+            '${update.version} tersedia'
+            ' (${update.channel})',
+      );
       final install = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (context) => _UpdateAvailableDialog(
           update: update,
           currentVersion: _appVersion,
+          latencyMs: _lastUpdateCheckMs,
+          verifiedBy: _lastVerifiedSigningKey,
         ),
       );
       if (install == true && mounted) await _downloadUpdate(update);
     } catch (error) {
-      if (mounted) _showMessage('Gagal memeriksa pembaruan: $error');
+      if (mounted) {
+        _updateState(() {
+          _lastUpdateCheckResult = 'gagal: $error';
+          _lastVerifiedSigningKey = null;
+        });
+        _showMessage('Gagal memeriksa pembaruan: $error');
+      }
       _notify('Update check gagal', '$error', error: true);
     } finally {
       if (mounted) _updateState(() => _updateChecking = false);
+      // Fleet adoption telemetry: report the installed version after every
+      // check (rate-limited client-side, opt-out honored).
+      unawaited(_sendUpdatePing());
     }
   }
 
@@ -93,16 +127,72 @@ extension _UpdateWorkflow on _AgentHomePageState {
     }
     _notify('Update ${update.version} siap', installer.path);
   }
+
+  /// Sends the installed-version ping for fleet adoption telemetry, if
+  /// enabled and an endpoint is configured. Resolves the per-install id once
+  /// and persists it. Telemetry must never disturb the app, so every failure
+  /// is swallowed.
+  Future<void> _sendUpdatePing() async {
+    try {
+      if (_installId.isEmpty) {
+        final preferences = await SharedPreferences.getInstance();
+        _installId = preferences.getString('install_id') ?? '';
+        if (_installId.isEmpty) {
+          _installId = base64Encode(
+            List<int>.generate(16, (_) => math.Random.secure().nextInt(256)),
+          );
+          await preferences.setString('install_id', _installId);
+        }
+      }
+      await _updatePingService.ping(
+        version: _appVersion,
+        channel: updateChannel,
+        os: Platform.operatingSystem,
+        installId: _installId,
+        enabled: _updatePingEnabled,
+      );
+    } catch (_) {
+      // Telemetry tidak boleh mengganggu aplikasi.
+    }
+  }
+
+  /// Opens the update & signing diagnostics dialog: the trusted signing keys
+  /// and which key verified the last update check.
+  Future<void> _openUpdateDiagnostics() async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) => _UpdateDiagnosticsDialog(
+        appVersion: _appVersion,
+        channel: updateChannel,
+        manifestUrl: updateManifestUrl,
+        allowedHosts: updateAllowedHosts,
+        trustedKeys: updateSigningPublicKeys,
+        lastCheckAt: _lastUpdateCheckAt?.toIso8601String(),
+        lastCheckResult: _lastUpdateCheckResult,
+        lastVerifiedKey: _lastVerifiedSigningKey,
+        lastCheckMs: _lastUpdateCheckMs,
+      ),
+    );
+  }
 }
 
 class _UpdateAvailableDialog extends StatelessWidget {
   const _UpdateAvailableDialog({
     required this.update,
     required this.currentVersion,
+    this.latencyMs,
+    this.verifiedBy,
   });
 
   final AppUpdate update;
   final String currentVersion;
+
+  /// How long the update check itself took (ms), reported via `onLatency`.
+  final int? latencyMs;
+
+  /// Which trusted signing key validated this release, reported via
+  /// `onVerified` (null when signature enforcement is disabled).
+  final String? verifiedBy;
 
   @override
   Widget build(BuildContext context) {
@@ -146,6 +236,18 @@ class _UpdateAvailableDialog extends StatelessWidget {
                 ),
               ],
             ),
+            if (latencyMs != null || verifiedBy != null) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Latency: ${latencyMs == null ? '—' : '$latencyMs ms'}  ·  '
+                'Verified by: ${verifiedBy ?? 'tidak ada (enforcement mati)'}',
+                style: TextStyle(
+                  fontFamily: 'Consolas',
+                  fontSize: 11,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),

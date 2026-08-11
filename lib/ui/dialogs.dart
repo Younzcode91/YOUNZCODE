@@ -14,6 +14,7 @@ class _ModelDialog extends StatefulWidget {
     required this.outputCostPerMillion,
     required this.monthlyTokenBudget,
     required this.onCheckForUpdates,
+    required this.onShowUpdateDiagnostics,
   });
 
   final String baseUrl;
@@ -25,6 +26,7 @@ class _ModelDialog extends StatefulWidget {
   final double outputCostPerMillion;
   final int monthlyTokenBudget;
   final Future<void> Function() onCheckForUpdates;
+  final VoidCallback onShowUpdateDiagnostics;
 
   @override
   State<_ModelDialog> createState() => _ModelDialogState();
@@ -477,6 +479,17 @@ class _ModelDialogState extends State<_ModelDialog> {
                     onPressed: widget.onCheckForUpdates,
                     icon: const Icon(Icons.system_update_alt, size: 16),
                     label: const Text('CHECK FOR UPDATES'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      side: BorderSide(color: theme.dividerColor),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: widget.onShowUpdateDiagnostics,
+                    icon: const Icon(Icons.verified_outlined, size: 16),
+                    label: const Text('UPDATE DIAGNOSTICS'),
                     style: OutlinedButton.styleFrom(
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -966,6 +979,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
     required this.allowWrite,
     required this.allowTerminal,
     required this.qualityGateEnabled,
+    required this.updatePingEnabled,
     required this.approvalMode,
     required this.environment,
     required this.baseUrl,
@@ -981,6 +995,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
   final bool allowWrite;
   final bool allowTerminal;
   final bool qualityGateEnabled;
+  final bool updatePingEnabled;
   final ApprovalMode approvalMode;
   final Map<String, String> environment;
   final String baseUrl;
@@ -993,6 +1008,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
     bool allowWrite,
     bool allowTerminal,
     bool qualityGateEnabled,
+    bool updatePingEnabled,
     ApprovalMode approvalMode,
     Map<String, String> environment,
     _ApiConfiguration api,
@@ -1007,6 +1023,7 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
   late bool _allowWrite = widget.allowWrite;
   late bool _allowTerminal = widget.allowTerminal;
   late bool _qualityGateEnabled = widget.qualityGateEnabled;
+  late bool _updatePingEnabled = widget.updatePingEnabled;
   late ApprovalMode _approvalMode = widget.approvalMode;
   late final _projectController = TextEditingController(
     text: widget.workspace.isEmpty ? 'No workspace selected' : widget.workspace,
@@ -1050,6 +1067,7 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
       _allowWrite,
       _allowTerminal,
       _qualityGateEnabled,
+      _updatePingEnabled,
       _approvalMode,
       _environment,
       _apiConfiguration,
@@ -1392,6 +1410,14 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
             'Run language checks and relevant tests after accepted agent changes.',
         value: _qualityGateEnabled,
         onChanged: (value) => setState(() => _qualityGateEnabled = value),
+      ),
+      _PermissionSetting(
+        title: 'UPDATE TELEMETRY',
+        description:
+            'Report the installed version to the update-ping endpoint so '
+            'release engineers can measure fleet adoption (no personal data).',
+        value: _updatePingEnabled,
+        onChanged: (value) => setState(() => _updatePingEnabled = value),
       ),
       const _PermissionSetting(
         title: 'NETWORK ACCESS',

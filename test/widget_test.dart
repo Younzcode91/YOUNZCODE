@@ -122,7 +122,7 @@ void main() {
     expect(find.byKey(const ValueKey('command-rail')), findsOneWidget);
     expect(find.byKey(const ValueKey('top-workspace-bar')), findsOneWidget);
     expect(find.byKey(const ValueKey('workspace-explorer')), findsOneWidget);
-    expect(find.textContaining('Build: v1.3.6'), findsOneWidget);
+    expect(find.textContaining('Build: v1.3.7'), findsOneWidget);
     expect(find.text('AGENT SESSION'), findsNothing);
     expect(find.text('YOUNZCODE DESKTOP'), findsNothing);
     expect(find.byKey(const ValueKey('model-selector')), findsOneWidget);
@@ -203,6 +203,64 @@ void main() {
     expect(find.text('PERMISSIONS'), findsOneWidget);
     expect(find.text('SECURITY'), findsOneWidget);
     expect(find.text('API'), findsOneWidget);
+  });
+
+  testWidgets('toggle UPDATE TELEMETRY di Project Settings tersimpan', (
+    tester,
+  ) async {
+    _setMockPreferences({});
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    // Buka Project Settings dan masuk ke tab PERMISSIONS.
+    await tester.tap(find.byKey(const ValueKey('rail-settings')));
+    await tester.pumpAndSettle();
+    expect(find.text('PROJECT SETTINGS'), findsOneWidget);
+    await tester.tap(find.text('PERMISSIONS'));
+    await tester.pumpAndSettle();
+
+    // Temukan Switch di baris UPDATE TELEMETRY.
+    final telemetryRow = find.ancestor(
+      of: find.text('UPDATE TELEMETRY'),
+      matching: find.byType(Row),
+    );
+    final telemetrySwitch = find.descendant(
+      of: telemetryRow,
+      matching: find.byType(Switch),
+    );
+    expect(telemetrySwitch, findsOneWidget);
+    // Default: telemetri aktif.
+    expect(tester.widget<Switch>(telemetrySwitch).value, isTrue);
+
+    // Matikan telemetri, lalu simpan.
+    await tester.ensureVisible(telemetrySwitch);
+    await tester.tap(telemetrySwitch);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Switch>(telemetrySwitch).value, isFalse);
+    await tester.tap(find.text('SAVE SETTINGS'));
+    await tester.pumpAndSettle();
+    expect(find.text('PROJECT SETTINGS'), findsNothing);
+
+    // Nilai tersimpan di SharedPreferences.
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getBool('update_ping_enabled'), isFalse);
+
+    // Buka lagi: toggle menampilkan nilai yang tersimpan.
+    await tester.tap(find.byKey(const ValueKey('rail-settings')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PERMISSIONS'));
+    await tester.pumpAndSettle();
+    final reopenedSwitch = find.descendant(
+      of: find.ancestor(
+        of: find.text('UPDATE TELEMETRY'),
+        matching: find.byType(Row),
+      ),
+      matching: find.byType(Switch),
+    );
+    expect(tester.widget<Switch>(reopenedSwitch).value, isFalse);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Enter mengirim dan Shift+Enter membuat baris baru', (
@@ -1348,6 +1406,40 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('agent-mode-selector')));
     await tester.pumpAndSettle();
     expect(find.textContaining('READ-ONLY'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('slash command update-status menampilkan diagnostik update', (
+    tester,
+  ) async {
+    _setMockPreferences({});
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(const KodeAgentApp());
+    await _pumpLoaded(tester);
+
+    final field = find.byKey(const ValueKey('prompt-field'));
+    await tester.tap(field);
+    await tester.enterText(field, '/update-status');
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    expect(find.text('UPDATE & SIGNING DIAGNOSTICS'), findsOneWidget);
+    expect(find.text('TRUSTED SIGNING KEYS (2)'), findsOneWidget);
+    // The two trusted keys are listed (full base64 selectable).
+    expect(find.textContaining('VERIFIED LAST'), findsNothing);
+    expect(find.textContaining('Latency'), findsNothing);
+    expect(
+      find.text('Belum ada pemeriksaan update di sesi ini.'),
+      findsOneWidget,
+    );
+    expect(find.text('CLOSE'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // Closing the dialog leaves the app intact.
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+    expect(find.text('UPDATE & SIGNING DIAGNOSTICS'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

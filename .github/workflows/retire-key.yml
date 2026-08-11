@@ -1,0 +1,85 @@
+name: Retire signing key
+
+# Retires a signing key from updateSigningPublicKeys once the nightly margin
+# history shows the fleet has had time to catch up (see
+# tool/retire_signing_key.dart for the exact preconditions: the key must be
+# trusted, a surviving key must remain, the history must have enough rows and
+# be fresh, and the current manifest must still verify with a surviving key).
+# Runs the validation first (dry-run), then applies the source change,
+# runs the update/backup tests, and commits the drop.
+
+on:
+  workflow_dispatch:
+    inputs:
+      retire_key:
+        description: >-
+          Public key (base64) atau prefix unik kunci yang di-retire dari
+          updateSigningPublicKeys
+        required: true
+      min_history_rows:
+        description: >-
+          Baris minimum riwayat malam sebagai masa tenggang fleet
+          (default 14 ~ 2 minggu nightly)
+        required: false
+        default: '14'
+      max_history_age_days:
+        description: >-
+          Usia maksimum baris riwayat terakhir; pipeline harus segar
+          (default 7)
+        required: false
+        default: '7'
+
+jobs:
+  retire:
+    name: Validate and retire key
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Validate retirement preconditions (nightly margin history)
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart tool/retire_signing_key.dart \
+            --retire "${{ inputs.retire_key }}" \
+            --history .ci/dap-load-history.csv \
+            --min-history-rows "${{ inputs.min_history_rows }}" \
+            --max-history-age-days "${{ inputs.max_history_age_days }}"
+
+      - name: Apply retirement, test, and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart tool/retire_signing_key.dart \
+            --retire "${{ inputs.retire_key }}" \
+            --history .ci/dap-load-history.csv \
+            --min-history-rows "${{ inputs.min_history_rows }}" \
+            --max-history-age-days "${{ inputs.max_history_age_days }}" \
+            --apply
+          flutter analyze
+          # Precompile the CLI tools so the suites below don't pay the
+          # ~5-7s dart run overhead per invocation.
+          bash tool/build_tools.sh
+          flutter test test/security_update_test.dart \
+            test/backup_receipt_test.dart test/retire_signing_key_test.dart
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/services/update_service.dart
+          git commit -m "ci: retire signing key dari updateSigningPublicKeys"
+          git pull --rebase --autostash
+          git push
+
+      - name: Reminder for the next release
+        shell: bash
+        run: |
+          echo "Kunci sudah di-retire. Rilis BERIKUTNYA harus ditandatangani"
+          echo "dengan kunci yang tersisa saja:"
+          echo "  dart run tool/sign_update.dart --key <path kunci tersisa> updates.json"
+          echo "Pastikan backup (vault entry + receipt) kunci tersisa tetap segar."

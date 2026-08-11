@@ -51,6 +51,7 @@ extension _WorkspaceLifecycle on _AgentHomePageState {
       _outputCostPerMillion = settings.outputCostPerMillion;
       _monthlyTokenBudget = settings.monthlyTokenBudget;
       _qualityGateEnabled = settings.qualityGateEnabled;
+      _updatePingEnabled = settings.updatePingEnabled;
       _model = settings.model;
       _models
         ..clear()
@@ -88,6 +89,8 @@ extension _WorkspaceLifecycle on _AgentHomePageState {
     unawaited(_refreshGit());
     unawaited(_loadCheckpointHistory(workspace));
     unawaited(_initializeCodeIntelligence(workspace));
+    // Startup version ping for fleet adoption telemetry.
+    unawaited(_sendUpdatePing());
     try {
       final preferences = await SharedPreferences.getInstance();
       if (!(preferences.getBool('onboarding_complete') ?? false) && mounted) {

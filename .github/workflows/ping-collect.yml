@@ -1,0 +1,66 @@
+name: Collect update pings
+
+# Pulls the deployed ping collector's export (see tool/ping_server.dart) into
+# the repo-tracked `.ci/update-pings.csv`, so the retire gate
+# (tool/retire_signing_key.dart) can measure TRUE fleet adoption instead of
+# the nightly-run proxy. Skips cleanly when no endpoint is configured.
+#
+# To enable: deploy tool/ping_server.dart somewhere public (HTTPS), set
+# updatePingEndpointUrl + updatePingAllowedHosts in the app, and configure the
+# repo VARIABLE PING_ENDPOINT_URL to the collector's base URL (a secret named
+# PING_ENDPOINT_URL is honored too, e.g. if the endpoint needs a token).
+
+on:
+  schedule:
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  collect:
+    name: Pull pings into .ci/update-pings.csv
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch ping export
+        shell: bash
+        env:
+          PING_ENDPOINT_URL: ${{ vars.PING_ENDPOINT_URL || secrets.PING_ENDPOINT_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$PING_ENDPOINT_URL" ]; then
+            echo "PING_ENDPOINT_URL not configured - skipping collection."
+            exit 0
+          fi
+          mkdir -p .ci
+          curl -fsSL --max-time 60 -o /tmp/pings.csv "$PING_ENDPOINT_URL/export.csv"
+          head -n 1 /tmp/pings.csv > .ci/update-pings.csv
+          # Append only NEW rows (dedup by full line, keep bounded history).
+          PING_HISTORY_ROWS="${{ vars.PING_HISTORY_ROWS || '200000' }}"
+          if [ -f .ci/update-pings.csv.prev ]; then
+            grep -vxFf .ci/update-pings.csv.prev /tmp/pings.csv >> .ci/update-pings.csv || true
+          else
+            tail -n +2 /tmp/pings.csv >> .ci/update-pings.csv
+          fi
+          head -n 1 .ci/update-pings.csv > .ci/update-pings.csv.tmp
+          tail -n "$PING_HISTORY_ROWS" .ci/update-pings.csv >> .ci/update-pings.csv.tmp
+          mv .ci/update-pings.csv.tmp .ci/update-pings.csv
+          cp .ci/update-pings.csv .ci/update-pings.csv.prev
+          echo "Rows: $(($(wc -l < .ci/update-pings.csv) - 1))"
+
+      - name: Commit pings
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci/update-pings.csv .ci/update-pings.csv.prev
+          if git diff --cached --quiet; then
+            echo "No new pings to commit."
+          else
+            git commit -m "ci: update fleet adoption pings"
+            git pull --rebase --autostash
+            git push
+          fi

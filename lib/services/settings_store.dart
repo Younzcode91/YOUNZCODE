@@ -65,6 +65,7 @@ class AppSettings {
     this.monthlyTokenBudget = 0,
     this.qualityGateEnabled = true,
     this.dapTimeoutMs = 30000,
+    this.updatePingEnabled = true,
   });
 
   final String baseUrl;
@@ -85,6 +86,11 @@ class AppSettings {
   /// Deliberately generous so debugpy / node adapters can cold-start on slow
   /// machines without the debug session being torn down.
   final int dapTimeoutMs;
+
+  /// Whether the app reports its installed version to the update-ping
+  /// endpoint (fleet adoption telemetry). Defaults to on; the user can turn
+  /// it off in Project Settings.
+  final bool updatePingEnabled;
 }
 
 class SettingsStore {
@@ -102,6 +108,7 @@ class SettingsStore {
   static const _monthlyTokenBudgetKey = 'monthly_token_budget';
   static const _qualityGateEnabledKey = 'quality_gate_enabled';
   static const _dapTimeoutMsKey = 'dap_timeout_ms';
+  static const _updatePingEnabledKey = 'update_ping_enabled';
 
   Future<AppSettings> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -162,6 +169,7 @@ class SettingsStore {
       monthlyTokenBudget: preferences.getInt(_monthlyTokenBudgetKey) ?? 0,
       qualityGateEnabled: preferences.getBool(_qualityGateEnabledKey) ?? true,
       dapTimeoutMs: preferences.getInt(_dapTimeoutMsKey) ?? 30000,
+      updatePingEnabled: preferences.getBool(_updatePingEnabledKey) ?? true,
     );
   }
 
@@ -208,6 +216,7 @@ class SettingsStore {
         _dapTimeoutMsKey,
         settings.dapTimeoutMs.clamp(5000, 600000).toInt(),
       ),
+      preferences.setBool(_updatePingEnabledKey, settings.updatePingEnabled),
     ]);
   }
 }

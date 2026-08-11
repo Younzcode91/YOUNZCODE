@@ -1,0 +1,280 @@
+name: Release pipeline
+
+# Automated release: on a v* tag, build the Windows installer, hash it, add
+# the release to updates.json, sign it with the surviving signing key(s)
+# restored from repository secrets, verify the signed manifest against the
+# baked-in key ring, publish updates.json to the manifest branch, and create
+# the GitHub release with the installer attached.
+#
+# Required secrets (the private keys are the only secrets needed to publish):
+#   UPDATE_SIGNING_KEY    - base64 seed of the primary signing key (content of
+#                           tool/signing/update_signing_private_key.txt)
+#   UPDATE_SIGNING_KEY_2  - optional; seed of the rotation key
+#                           (tool/signing/update_signing_key_2.txt). Set it to
+#                           dual-sign while both keys are live; delete it when
+#                           that key is retired so only the survivor signs.
+# Optional variables:
+#   MANIFEST_BRANCH       - branch that serves updates.json to the in-app
+#                           check (default: main — matches
+#                           updateManifestUrl in update_service.dart)
+#   RELEASE_NOTES         - notes for the release (default: generated)
+#
+# Before tagging, the source must already be prepared (as in the manual flow):
+# pubspec.yaml, lib/main.dart and installer/YOUNZCODE.iss bumped to the tag
+# version, and a fresh signing backup receipt committed (.ci/
+# signing-backup-receipt.json). The pipeline validates all of this and fails
+# fast with a clear message instead of shipping a mismatched build.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Versi rilis (mis. 1.3.7). Tag v$VER harus sudah ada.'
+        required: true
+      release_notes:
+        description: 'Catatan rilis (kosongkan untuk catatan default)'
+        required: false
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release:
+    name: Build, sign, and publish release
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Determine version from tag
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ inputs.version }}"
+          else
+            VER="${GITHUB_REF_NAME#v}"
+          fi
+          case "$VER" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::Versi tidak valid: $VER"; exit 1 ;;
+          esac
+          echo "VER=$VER" >> "$GITHUB_ENV"
+          echo "Version: $VER"
+
+      - name: Validate release is prepared (version baked into source)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="$VER"
+          grep -qE "^version: ${VER}(\\+[0-9]+)?\$" pubspec.yaml \
+            || { echo "::error::pubspec.yaml belum di-bump ke $VER"; exit 1; }
+          grep -qF "_appVersion = '$VER'" lib/main.dart \
+            || { echo "::error::lib/main.dart belum di-bump ke $VER"; exit 1; }
+          grep -qF "MyAppVersion \"$VER\"" installer/YOUNZCODE.iss \
+            || { echo "::error::installer/YOUNZCODE.iss belum di-bump ke $VER"; exit 1; }
+          echo "Version $VER baked into source: OK"
+
+      - name: Verify signing-key backup receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart run tool/check_backup_receipt.dart \
+            --receipt .ci/signing-backup-receipt.json
+
+      - name: Build Windows release
+        shell: bash
+        run: flutter build windows --release
+
+      - name: Stage release folder (matches installer/YOUNZCODE.iss sources)
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf release
+          mkdir -p release
+          cp -r build/windows/x64/runner/Release/* release/
+          cp -r skills release/skills
+
+      - name: Compile installer (Inno Setup)
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: installer/YOUNZCODE.iss
+
+      - name: Compute installer SHA-256
+        id: hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          INSTALLER="installer/output/YOUNZCODE-Setup-$VER.exe"
+          test -f "$INSTALLER" \
+            || { echo "::error::Installer tidak ditemukan: $INSTALLER"; exit 1; }
+          SHA="$(sha256sum "$INSTALLER" | awk '{print $1}')"
+          echo "SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "Installer: $INSTALLER"
+          echo "SHA-256: $SHA"
+
+      - name: Add release entry to updates.json
+        shell: bash
+        env:
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          VER="$VER"
+          SHA256="$SHA256"
+          if [ -n "${NOTES:-}" ]; then
+            RELEASE_NOTES="$NOTES"
+          else
+            RELEASE_NOTES="Rilis $VER: build dan tanda tangan otomatis via pipeline rilis."
+          fi
+          DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VER}/YOUNZCODE-Setup-${VER}.exe"
+          export VER RELEASE_NOTES DOWNLOAD_URL SHA256
+          python - <<'PY'
+import json, os
+ver = os.environ['VER']
+entry = {
+    "version": ver,
+    "channel": "stable",
+    "notes": os.environ['RELEASE_NOTES'],
+    "download_url": os.environ['DOWNLOAD_URL'],
+    "sha256": os.environ['SHA256'],
+    "signature": "",
+    "signatures": [],
+}
+with open('updates.json', encoding='utf-8') as f:
+    manifest = json.load(f)
+# Replace any existing entry with the same version (idempotent re-runs).
+manifest['releases'] = [
+    r for r in manifest['releases'] if r.get('version') != ver
+] + [entry]
+with open('updates.json', 'w', encoding='utf-8') as f:
+    json.dump(manifest, f, ensure_ascii=False, indent=2)
+    f.write('\n')
+print(f"Added release {ver} to updates.json")
+PY
+
+      - name: Restore signing keys from secrets
+        shell: bash
+        env:
+          KEY_1: ${{ secrets.UPDATE_SIGNING_KEY }}
+          KEY_2: ${{ secrets.UPDATE_SIGNING_KEY_2 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/signing-keys"
+          KEY_ARGS=()
+          if [ -n "${KEY_1:-}" ]; then
+            printf '%s' "$KEY_1" > "$RUNNER_TEMP/signing-keys/key_1.txt"
+            KEY_ARGS+=(--key "$RUNNER_TEMP/signing-keys/key_1.txt")
+          fi
+          if [ -n "${KEY_2:-}" ]; then
+            printf '%s' "$KEY_2" > "$RUNNER_TEMP/signing-keys/key_2.txt"
+            KEY_ARGS+=(--key "$RUNNER_TEMP/signing-keys/key_2.txt")
+          fi
+          if [ "${#KEY_ARGS[@]}" -eq 0 ]; then
+            echo "::error::Tidak ada UPDATE_SIGNING_KEY / UPDATE_SIGNING_KEY_2 yang dikonfigurasi."
+            exit 1
+          fi
+          printf '%s\n' "${KEY_ARGS[@]}" > "$RUNNER_TEMP/signing-keys/key_args.txt"
+          echo "Keys restored: ${#KEY_ARGS[@]}"
+
+      - name: Sign updates.json with surviving key(s)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t KEY_ARGS < "$RUNNER_TEMP/signing-keys/key_args.txt"
+          dart run tool/sign_update.dart "${KEY_ARGS[@]}" updates.json
+
+      - name: Verify signed manifest against baked-in key ring
+        shell: bash
+        run: |
+          set -euo pipefail
+          dart run tool/e2e_update_check.dart \
+            --manifest updates.json \
+            --expect-version "$VER"
+
+      - name: Run signing-related test suites
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tool/build_tools.sh
+          flutter analyze
+          flutter test test/security_update_test.dart \
+            test/backup_receipt_test.dart test/retire_signing_key_test.dart
+
+      - name: Publish updates.json to the manifest branch
+        shell: bash
+        env:
+          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || 'main' }}
+        run: |
+          set -euo pipefail
+          VER="$VER"
+          BRANCH="$MANIFEST_BRANCH"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin "$BRANCH" || { echo "::error::Cabang $BRANCH tidak ada di origin"; exit 1; }
+          # Safety: only fast-forward the manifest branch — the tag commit must
+          # already be reachable from it (releases are tagged on the branch
+          # that serves updates.json). Never force-push.
+          git merge-base --is-ancestor "origin/$BRANCH" HEAD \
+            || { echo "::error::Tag tidak berada di atas origin/$BRANCH — manifest harus dipublikasikan manual."; exit 1; }
+          git checkout -B "ci-release-$VER"
+          git add updates.json
+          git diff --cached --quiet \
+            && echo "updates.json tidak berubah (sudah terpublikasi?)" \
+            || git commit -m "release $VER: manifest ditandatangani"
+          git push origin "ci-release-$VER:$BRANCH"
+          echo "updates.json dipublikasikan ke $BRANCH"
+
+      - name: Create GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          set -euo pipefail
+          VER="$VER"
+          if [ -n "${NOTES:-}" ]; then
+            RELEASE_NOTES="$NOTES"
+          else
+            RELEASE_NOTES="Rilis $VER: build Windows, manifest ditandatangani dengan kunci penandatanganan yang bertahan."
+          fi
+          INSTALLER="installer/output/YOUNZCODE-Setup-$VER.exe"
+          gh release create "v$VER" "$INSTALLER" \
+            --title "YOUNZCODE v$VER" \
+            --notes "$RELEASE_NOTES"
+          echo "Release v$VER dibuat dengan $INSTALLER"
+
+      - name: Verify live update path (retry for CDN propagation)
+        shell: bash
+        env:
+          PREV_VERSION: ${{ vars.PREV_VERSION }}
+        run: |
+          set -euo pipefail
+          # A client one release behind: the newest tagged release must be
+          # offered. PREV_VERSION (repo variable) pins the check so the live
+          # e2e asserts the exact upgrade path; default 1.3.5 (any newer
+          # release is then offered).
+          CURRENT="${PREV_VERSION:-1.3.5}"
+          for attempt in $(seq 1 8); do
+            if dart run tool/e2e_update_check.dart \
+                --expect-version "$VER" --current-version "$CURRENT"; then
+              echo "LIVE E2E: PASS (attempt $attempt)"
+              exit 0
+            fi
+            echo "Percobaan $attempt belum siap (raw.githubusercontent mungkin belum terpropagasi) — tunggu 30s..."
+            sleep 30
+          done
+          echo "::error::Live E2E gagal setelah 8 percobaan."
+          exit 1
