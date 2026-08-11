@@ -72,6 +72,7 @@ class AgentService {
     this.onInsight,
     this.toolPermissionPolicies = const {},
     this.onToolPermissionChanged,
+    this.allowExternalPaths = true,
     BrowserAutomation? browser,
     http.Client? httpClient,
   }) : _tools = WorkspaceTools(
@@ -86,6 +87,7 @@ class AgentService {
          onChangesChanged: onChanges,
          stageEdits: true,
          browser: browser,
+         allowExternalPaths: allowExternalPaths,
          toolPermissionPolicies: toolPermissionPolicies,
          onToolPermissionChanged: onToolPermissionChanged,
        ) {
@@ -130,6 +132,10 @@ class AgentService {
   final AgentInsight? onInsight;
   final Map<String, ToolPermissionPolicy> toolPermissionPolicies;
   final ToolPermissionChanged? onToolPermissionChanged;
+
+  /// When false, the agent can never read or write outside [workspace];
+  /// external-directory access is rejected outright instead of prompting.
+  final bool allowExternalPaths;
   final WorkspaceTools _tools;
   late final AgentCompletionClient _completionClient;
   final List<Map<String, dynamic>> _messages = [];

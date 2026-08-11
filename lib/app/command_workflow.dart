@@ -158,6 +158,8 @@ extension _CommandWorkflow on _AgentHomePageState {
       case '/build':
         _setPlanMode(false);
         _showMessage('Build Mode diaktifkan.');
+      case '/update':
+        await _checkForUpdates();
       default:
         _addLocalResponse(
           'Command "$command" tidak dikenal. Gunakan "/help" untuk melihat daftar command.',
@@ -308,6 +310,9 @@ extension _CommandWorkflow on _AgentHomePageState {
           allowWrite: true,
           allowTerminal: false,
           approvalMode: ApprovalMode.approveForMe,
+          // Workers are isolated: never read or write outside their own
+          // worktree, even though the callback auto-approves everything else.
+          allowExternalPaths: false,
           environment: environment,
           timeoutMs: _timeoutMs,
           headers: headers,

@@ -64,6 +64,7 @@ class AppSettings {
     this.outputCostPerMillion = 0,
     this.monthlyTokenBudget = 0,
     this.qualityGateEnabled = true,
+    this.dapTimeoutMs = 30000,
   });
 
   final String baseUrl;
@@ -79,6 +80,11 @@ class AppSettings {
   final double outputCostPerMillion;
   final int monthlyTokenBudget;
   final bool qualityGateEnabled;
+
+  /// Timeout (milliseconds) for the debug adapter startup handshake.
+  /// Deliberately generous so debugpy / node adapters can cold-start on slow
+  /// machines without the debug session being torn down.
+  final int dapTimeoutMs;
 }
 
 class SettingsStore {
@@ -95,6 +101,7 @@ class SettingsStore {
   static const _outputCostKey = 'output_cost_per_million';
   static const _monthlyTokenBudgetKey = 'monthly_token_budget';
   static const _qualityGateEnabledKey = 'quality_gate_enabled';
+  static const _dapTimeoutMsKey = 'dap_timeout_ms';
 
   Future<AppSettings> load() async {
     final preferences = await SharedPreferences.getInstance();
@@ -154,6 +161,7 @@ class SettingsStore {
       outputCostPerMillion: preferences.getDouble(_outputCostKey) ?? 0,
       monthlyTokenBudget: preferences.getInt(_monthlyTokenBudgetKey) ?? 0,
       qualityGateEnabled: preferences.getBool(_qualityGateEnabledKey) ?? true,
+      dapTimeoutMs: preferences.getInt(_dapTimeoutMsKey) ?? 30000,
     );
   }
 
@@ -196,6 +204,10 @@ class SettingsStore {
         settings.monthlyTokenBudget.clamp(0, 1 << 62).toInt(),
       ),
       preferences.setBool(_qualityGateEnabledKey, settings.qualityGateEnabled),
+      preferences.setInt(
+        _dapTimeoutMsKey,
+        settings.dapTimeoutMs.clamp(5000, 600000).toInt(),
+      ),
     ]);
   }
 }

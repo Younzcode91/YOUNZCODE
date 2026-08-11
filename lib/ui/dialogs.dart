@@ -13,6 +13,7 @@ class _ModelDialog extends StatefulWidget {
     required this.inputCostPerMillion,
     required this.outputCostPerMillion,
     required this.monthlyTokenBudget,
+    required this.onCheckForUpdates,
   });
 
   final String baseUrl;
@@ -23,6 +24,7 @@ class _ModelDialog extends StatefulWidget {
   final double inputCostPerMillion;
   final double outputCostPerMillion;
   final int monthlyTokenBudget;
+  final Future<void> Function() onCheckForUpdates;
 
   @override
   State<_ModelDialog> createState() => _ModelDialogState();
@@ -471,6 +473,17 @@ class _ModelDialogState extends State<_ModelDialog> {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
+                  OutlinedButton.icon(
+                    onPressed: widget.onCheckForUpdates,
+                    icon: const Icon(Icons.system_update_alt, size: 16),
+                    label: const Text('CHECK FOR UPDATES'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      side: BorderSide(color: theme.dividerColor),
+                    ),
+                  ),
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
@@ -959,6 +972,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
     required this.model,
     required this.apiKey,
     required this.timeoutMs,
+    required this.dapTimeoutMs,
     required this.headers,
     required this.onSave,
   });
@@ -973,6 +987,7 @@ class _ProjectSettingsDialog extends StatefulWidget {
   final String model;
   final String apiKey;
   final int timeoutMs;
+  final int dapTimeoutMs;
   final Map<String, String> headers;
   final Future<void> Function(
     bool allowWrite,
@@ -1004,6 +1019,9 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
   late final _timeoutController = TextEditingController(
     text: '${widget.timeoutMs}',
   );
+  late final _dapTimeoutController = TextEditingController(
+    text: '${widget.dapTimeoutMs}',
+  );
   final _headerKeyController = TextEditingController();
   final _headerValueController = TextEditingController();
   late final _environment = {...widget.environment};
@@ -1021,6 +1039,7 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
     _apiModelController.dispose();
     _apiKeyController.dispose();
     _timeoutController.dispose();
+    _dapTimeoutController.dispose();
     _headerKeyController.dispose();
     _headerValueController.dispose();
     super.dispose();
@@ -1043,6 +1062,7 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
     model: _apiModelController.text.trim(),
     apiKey: _apiKeyController.text.trim(),
     timeoutMs: int.tryParse(_timeoutController.text) ?? 120000,
+    dapTimeoutMs: int.tryParse(_dapTimeoutController.text) ?? 30000,
     headers: _headers,
   );
 
@@ -1471,6 +1491,20 @@ class _ProjectSettingsDialogState extends State<_ProjectSettingsDialog> {
           ),
           style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
         ),
+        const SizedBox(height: 12),
+        const _FieldLabel('DEBUG ADAPTER HANDSHAKE TIMEOUT (MS)'),
+        TextField(
+          key: const ValueKey('dap-timeout-field'),
+          controller: _dapTimeoutController,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            helperText:
+                'Default 30000 (30 seconds). Increase on slow machines so the '
+                'Python and Node.js debug adapters can finish their startup '
+                'handshake without the session being torn down.',
+          ),
+          style: const TextStyle(fontFamily: 'Consolas', fontSize: 12),
+        ),
         const SizedBox(height: 18),
         const Text('GLOBAL HEADERS', style: _SettingsHeading.style),
         const SizedBox(height: 8),
@@ -1607,6 +1641,7 @@ class _ApiConfiguration {
     required this.model,
     required this.apiKey,
     required this.timeoutMs,
+    required this.dapTimeoutMs,
     required this.headers,
   });
 
@@ -1614,6 +1649,7 @@ class _ApiConfiguration {
   final String model;
   final String apiKey;
   final int timeoutMs;
+  final int dapTimeoutMs;
   final Map<String, String> headers;
 }
 

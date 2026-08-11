@@ -33,6 +33,7 @@ class _WorkspaceEditor extends StatefulWidget {
     required this.onShowChat,
     required this.workspace,
     required this.trusted,
+    required this.dapTimeoutMs,
   });
 
   final List<_OpenDocument> documents;
@@ -44,6 +45,10 @@ class _WorkspaceEditor extends StatefulWidget {
   final String workspace;
   final bool trusted;
 
+  /// Timeout (milliseconds) for the debug adapter startup handshake;
+  /// configurable in Project Settings for slow machines.
+  final int dapTimeoutMs;
+
   @override
   State<_WorkspaceEditor> createState() => _WorkspaceEditorState();
 }
@@ -52,7 +57,9 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
   final _editorFocus = FocusNode();
   final _breakpoints = <String, Set<int>>{};
   final _debugOutput = <String>[];
-  final _debugAdapter = DebugAdapterService();
+  late final _debugAdapter = DebugAdapterService(
+    timeout: Duration(milliseconds: widget.dapTimeoutMs),
+  );
   StreamSubscription<DebugAdapterEvent>? _debugEvents;
   List<String> _completions = const [];
   List<EditorDiagnostic> _diagnostics = const [];
@@ -228,6 +235,10 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
       _appendDebug('${event.body['output'] ?? ''}');
       return;
     }
+    if (event.name == 'diagnostics') {
+      _appendDiagnostics(event.body);
+      return;
+    }
     if (event.name == 'stopped') {
       setState(() {
         _debugPaused = true;
@@ -279,6 +290,40 @@ class _WorkspaceEditorState extends State<_WorkspaceEditor> {
 
   void _appendDebug(String value) {
     if (mounted) setState(() => _debugOutput.add(value.trimRight()));
+  }
+
+  /// Renders the watchdog's 'diagnostics' event: why the session failed,
+  /// the adapter's stderr tail, and which requests were still pending.
+  void _appendDiagnostics(Map<String, dynamic> body) {
+    if (!mounted) return;
+    final lines = <String>[
+      '── DEBUG SESSION DIAGNOSTICS ──',
+      '${body['reason'] ?? 'Debug session failed.'}',
+    ];
+    final exitCode = body['exitCode'];
+    if (exitCode != null) {
+      lines.add('Adapter exit code: $exitCode');
+    }
+    final stderr = (body['stderr'] as List?)?.cast<String>() ?? const [];
+    if (stderr.isEmpty) {
+      lines.add('Adapter stderr: (none captured)');
+    } else {
+      lines.add('Adapter stderr (last ${stderr.length} lines):');
+      lines.addAll(stderr.map((line) => '  $line'));
+    }
+    final pending = (body['pending'] as List?) ?? const [];
+    if (pending.isEmpty) {
+      lines.add('Requests pending at failure: none');
+    } else {
+      lines.add('Requests still pending at failure:');
+      for (final request in pending) {
+        final map = Map<String, dynamic>.from(request as Map);
+        lines.add(
+          '  ${map['command']} (seq ${map['seq']}, ${map['elapsedMs']}ms)',
+        );
+      }
+    }
+    setState(() => _debugOutput.addAll(lines));
   }
 
   Future<void> _stopDebug() async {

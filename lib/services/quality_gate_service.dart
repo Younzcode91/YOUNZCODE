@@ -3,6 +3,8 @@ import 'dart:io';
 
 import 'package:path/path.dart' as path;
 
+import 'process_launch.dart';
+
 class QualityCheck {
   const QualityCheck({
     required this.label,
@@ -189,11 +191,15 @@ class QualityGateService {
     Duration timeout,
   ) async {
     final stopwatch = Stopwatch()..start();
+    // runInShell: false keeps shell metacharacters in file names (e.g. `&` or
+    // spaces) out of the command line; batch wrappers are re-routed through
+    // cmd.exe without interpreting the arguments.
+    final launch = resolveProcessLaunch(check.executable, check.arguments);
     final process = await Process.start(
-      check.executable,
-      check.arguments,
+      launch.executable,
+      launch.arguments,
       workingDirectory: workspace,
-      runInShell: Platform.isWindows,
+      runInShell: false,
     );
     final stdoutFuture = process.stdout
         .transform(const SystemEncoding().decoder)

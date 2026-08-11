@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'process_launch.dart';
+
 class DebugAdapterLaunch {
   const DebugAdapterLaunch({
     required this.executable,
@@ -108,7 +110,53 @@ class DebugAdapterEvent {
   final Map<String, dynamic> body;
 }
 
+/// Handshake timing for one debug session, so the load-test harness can
+/// report how close a cold start came to the configured timeout.
+class DebugAdapterTiming {
+  DebugAdapterTiming({required this.adapterId, required this.timeout});
+
+  final String adapterId;
+  final Duration timeout;
+  final _stopwatch = Stopwatch()..start();
+  Duration? initializedAfter;
+  Duration? launchAfter;
+
+  void markInitialized() => initializedAfter ??= _stopwatch.elapsed;
+
+  void markLaunch() => launchAfter ??= _stopwatch.elapsed;
+
+  Duration get total => launchAfter ?? initializedAfter ?? _stopwatch.elapsed;
+
+  Map<String, Object?> toJson() => {
+    'adapterId': adapterId,
+    'timeoutMs': timeout.inMilliseconds,
+    'initializedMs': initializedAfter?.inMilliseconds,
+    'launchMs': launchAfter?.inMilliseconds,
+    'totalMs': total.inMilliseconds,
+  };
+}
+
+/// A DAP request that is still waiting for the adapter's response.
+/// Tracked so a failed session can report which commands were in flight.
+class _PendingRequest {
+  _PendingRequest({required this.command});
+
+  final String command;
+  final DateTime startedAt = DateTime.now();
+  final completer = Completer<Map<String, dynamic>>();
+}
+
 class DebugAdapterService {
+  DebugAdapterService({this.timeout = const Duration(seconds: 30)});
+
+  /// Timeout for the DAP handshake: per-request responses, the initial
+  /// `initialized` event, and the JavaScript adapter's listening line.
+  /// Deliberately generous: debugpy / js-debug cold starts can exceed 15
+  /// seconds on a busy machine (for example when the full test suite runs
+  /// concurrently), and a premature timeout tears the adapter down and fails
+  /// the debug session.
+  final Duration timeout;
+
   Process? _process;
   Socket? _socket;
   IOSink? _sink;
@@ -117,7 +165,14 @@ class DebugAdapterService {
   final _childSockets = <Socket>[];
   final _childSubscriptions = <StreamSubscription<List<int>>>[];
   final _events = StreamController<DebugAdapterEvent>.broadcast();
-  final _pending = <int, Completer<Map<String, dynamic>>>{};
+  final _pending = <int, _PendingRequest>{};
+  final _stderrBuffer = <String>[];
+  Timer? _watchdog;
+  bool _processExited = false;
+  int? _processExitCode;
+  bool _cleaning = false;
+  bool _diagnosticsEmitted = false;
+  DebugAdapterTiming? _timing;
   final _buffers = <IOSink, List<int>>{};
   final _initialized = <IOSink, Completer<void>>{};
   Future<void> _writeTail = Future<void>.value();
@@ -133,6 +188,10 @@ class DebugAdapterService {
   bool get running => _process != null;
   int? get threadId => _threadId;
 
+  /// Handshake timing of the most recent session (null before any `start`).
+  /// The load-test harness reads this to report cold-start margins.
+  Map<String, Object?>? get handshakeTiming => _timing?.toJson();
+
   Future<void> start({
     required DebugAdapterLaunch launch,
     required String workspace,
@@ -140,13 +199,25 @@ class DebugAdapterService {
     required Set<int> breakpoints,
   }) async {
     if (_process != null) throw StateError('Debug adapter is already running.');
+    // Adapter executables and scripts can live under paths containing `&` or
+    // spaces; launch without a shell so no metacharacter is ever interpreted.
+    final resolved = resolveProcessLaunch(launch.executable, launch.arguments);
     final process = await Process.start(
-      launch.executable,
-      launch.arguments,
+      resolved.executable,
+      resolved.arguments,
       workingDirectory: workspace,
-      runInShell: Platform.isWindows,
+      runInShell: false,
     );
     _process = process;
+    _processExited = false;
+    _processExitCode = null;
+    _diagnosticsEmitted = false;
+    // Watchdog: periodically check adapter health so a crash mid-handshake
+    // fails fast with diagnostics instead of waiting for a request timeout.
+    _watchdog = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _watchdogTick(),
+    );
     try {
       if (launch.socketServer) {
         final stdout = process.stdout.asBroadcastStream();
@@ -154,7 +225,7 @@ class DebugAdapterService {
             .transform(utf8.decoder)
             .transform(const LineSplitter())
             .firstWhere((line) => line.contains('Debug server listening at'))
-            .timeout(const Duration(seconds: 15));
+            .timeout(timeout);
         final port = int.tryParse(
           RegExp(r':(\d+)\s*$').firstMatch(listening)?.group(1) ?? '',
         );
@@ -178,23 +249,38 @@ class DebugAdapterService {
       }
       _stderrSubscription = process.stderr
           .transform(const SystemEncoding().decoder)
-          .listen(
-            (text) => _events.add(
+          .listen((text) {
+            _appendStderr(text);
+            _events.add(
               DebugAdapterEvent('output', {
                 'category': 'stderr',
                 'output': text,
               }),
-            ),
-          );
+            );
+          });
       unawaited(
         process.exitCode.then((code) {
-          if (identical(_process, process)) {
-            _events.add(DebugAdapterEvent('terminated', {'exitCode': code}));
-            unawaited(_cleanProcess(process));
-          }
+          if (!identical(_process, process)) return;
+          _processExited = true;
+          _processExitCode = code;
+          _events.add(DebugAdapterEvent('terminated', {'exitCode': code}));
+          // Requests still in flight mean the session died mid-handshake or
+          // mid-command; fail with diagnostics instead of a bare error.
+          unawaited(
+            _pending.isEmpty
+                ? _cleanProcess(process)
+                : _failSession(
+                    'The debug adapter process exited (code $code) with '
+                    'requests still pending.',
+                  ),
+          );
         }),
       );
 
+      _timing = DebugAdapterTiming(
+        adapterId: '${launch.launchArguments['type']}',
+        timeout: timeout,
+      );
       final sink = _sink!;
       final initialized = Completer<void>();
       _initialized[sink] = initialized;
@@ -211,7 +297,8 @@ class DebugAdapterService {
         'supportsStartDebuggingRequest': launch.socketServer,
       });
       final launchRequest = request('launch', launch.launchArguments);
-      await initialized.future.timeout(const Duration(seconds: 15));
+      await initialized.future.timeout(timeout);
+      _timing?.markInitialized();
       await _setBreakpoints(sink, sourcePath, breakpoints);
       await request('setExceptionBreakpoints', {'filters': <String>[]});
       await request('configurationDone');
@@ -221,8 +308,9 @@ class DebugAdapterService {
         await continueExecution();
       }
       await launchRequest;
-    } catch (_) {
-      await _cleanProcess(process);
+      _timing?.markLaunch();
+    } catch (error) {
+      await _failSession('Debug session failed: $error');
       rethrow;
     }
   }
@@ -244,8 +332,8 @@ class DebugAdapterService {
     Map<String, Object?> arguments = const {},
   ]) async {
     final sequence = _sequence++;
-    final completer = Completer<Map<String, dynamic>>();
-    _pending[sequence] = completer;
+    final pending = _PendingRequest(command: command);
+    _pending[sequence] = pending;
     final encodedMessage = jsonEncode({
       'seq': sequence,
       'type': 'request',
@@ -254,10 +342,15 @@ class DebugAdapterService {
     });
     final bytes = utf8.encode(encodedMessage);
     await _writeFrame(sink, bytes);
-    return completer.future.timeout(
-      const Duration(seconds: 15),
+    return pending.completer.future.timeout(
+      timeout,
       onTimeout: () {
         _pending.remove(sequence);
+        _emitDiagnostics(
+          reason:
+              'Debug adapter did not answer "$command" within '
+              '${timeout.inSeconds}s.',
+        );
         throw TimeoutException('Debug adapter did not answer $command.');
       },
     );
@@ -343,8 +436,9 @@ class DebugAdapterService {
 
   void _handleMessage(IOSink sink, Map<String, dynamic> message) {
     if (message['type'] == 'response') {
-      final completer = _pending.remove(message['request_seq']);
-      if (completer == null) return;
+      final pending = _pending.remove(message['request_seq']);
+      if (pending == null) return;
+      final completer = pending.completer;
       if (message['success'] == false) {
         completer.completeError(
           StateError(
@@ -437,7 +531,7 @@ class DebugAdapterService {
         'supportsStartDebuggingRequest': true,
       });
       final launchRequest = _requestOn(socket, command, configuration);
-      await _initialized[socket]!.future.timeout(const Duration(seconds: 15));
+      await _initialized[socket]!.future.timeout(timeout);
       await _setBreakpoints(socket, sourcePath, _breakpoints);
       await _requestOn(socket, 'setExceptionBreakpoints', {
         'filters': <String>[],
@@ -526,10 +620,76 @@ class DebugAdapterService {
     return -1;
   }
 
+  static const _stderrBufferLimit = 60;
+
+  void _appendStderr(String text) {
+    for (final line in text.trimRight().split('\n')) {
+      final trimmed = line.trimRight();
+      if (trimmed.isEmpty) continue;
+      _stderrBuffer.add(trimmed);
+    }
+    if (_stderrBuffer.length > _stderrBufferLimit) {
+      _stderrBuffer.removeRange(0, _stderrBuffer.length - _stderrBufferLimit);
+    }
+  }
+
+  /// Periodic health check: if the adapter process has already exited while
+  /// requests are still in flight, fail the session right away with
+  /// diagnostics instead of waiting for the per-request timeout to expire.
+  void _watchdogTick() {
+    if (!_processExited || _pending.isEmpty || _process == null) return;
+    final exitCode = _processExitCode;
+    unawaited(
+      _failSession(
+        'The debug adapter process exited (code $exitCode) while requests '
+        'were still pending.',
+      ),
+    );
+  }
+
+  /// Emits a 'diagnostics' event carrying the adapter's stderr tail and the
+  /// in-flight request details, so the UI can explain why a session failed.
+  /// Emitted at most once per session.
+  void _emitDiagnostics({required String reason}) {
+    if (_events.isClosed || _diagnosticsEmitted) return;
+    _diagnosticsEmitted = true;
+    _events.add(
+      DebugAdapterEvent('diagnostics', {
+        'reason': reason,
+        'stderr': List<String>.from(_stderrBuffer),
+        'pending': [
+          for (final entry in _pending.entries)
+            {
+              'seq': entry.key,
+              'command': entry.value.command,
+              'elapsedMs': DateTime.now()
+                  .difference(entry.value.startedAt)
+                  .inMilliseconds,
+            },
+        ],
+        'exitCode': _processExitCode,
+        'timing': _timing?.toJson(),
+      }),
+    );
+  }
+
+  /// Tears a failed session down after surfacing a diagnostics event.
+  Future<void> _failSession(String reason) async {
+    _emitDiagnostics(reason: reason);
+    await _cleanProcess();
+  }
+
   Future<void> _cleanProcess([Process? expectedProcess]) async {
+    if (_cleaning) return;
     final process = _process;
     if (expectedProcess != null && !identical(process, expectedProcess)) return;
+    _cleaning = true;
     _process = null;
+    _processExited = false;
+    _processExitCode = null;
+    _watchdog?.cancel();
+    _watchdog = null;
+    _stderrBuffer.clear();
     final stdoutSubscription = _stdoutSubscription;
     final stderrSubscription = _stderrSubscription;
     final socket = _socket;
@@ -549,9 +709,9 @@ class DebugAdapterService {
     _breakpoints = const {};
     _childSockets.clear();
     _childSubscriptions.clear();
-    for (final completer in _pending.values) {
-      if (!completer.isCompleted) {
-        completer.completeError(StateError('Debug adapter stopped.'));
+    for (final pending in _pending.values) {
+      if (!pending.completer.isCompleted) {
+        pending.completer.completeError(StateError('Debug adapter stopped.'));
       }
     }
     _pending.clear();
@@ -568,6 +728,7 @@ class DebugAdapterService {
     }
     await socket?.close();
     if (process != null) await _terminateProcessTree(process);
+    _cleaning = false;
   }
 
   static Future<void> _terminateProcessTree(Process process) async {

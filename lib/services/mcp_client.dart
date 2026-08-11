@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../models/addon.dart';
+import 'process_launch.dart';
 
 typedef McpLaunchApproval =
     Future<bool> Function(String command, List<String> arguments);
@@ -102,12 +103,16 @@ class McpClient {
     if (!await approveLaunch(config.command!, config.arguments)) {
       throw StateError('MCP server launch was denied.');
     }
+    // runInShell: false keeps shell metacharacters in arguments (e.g. `&` or
+    // spaces in a server path) out of the command line; batch wrappers are
+    // re-routed through cmd.exe without interpreting the arguments.
+    final launch = resolveProcessLaunch(config.command!, config.arguments);
     final process = await Process.start(
-      config.command!,
-      config.arguments,
+      launch.executable,
+      launch.arguments,
       workingDirectory: workspace,
       environment: {...Platform.environment, ...config.environment},
-      runInShell: Platform.isWindows,
+      runInShell: false,
     );
     _process = process;
     _stdout = process.stdout

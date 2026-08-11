@@ -48,3 +48,6 @@ app.*.map.json
 graphify-out/
 /release*/
 /installer/output/
+
+# Update signing secret (never commit the Ed25519 private key)
+/tool/signing/

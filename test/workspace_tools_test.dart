@@ -76,6 +76,56 @@ void main() {
     expect(await tools.execute('read_file', {'path': file.path}), 'external');
   });
 
+  test(
+    'allowExternalPaths false menolak akses luar walau persetujuan otomatis',
+    () async {
+      final root = await Directory.systemTemp.createTemp('younzcode-tools-');
+      final external = await Directory.systemTemp.createTemp(
+        'younzcode-external-',
+      );
+      addTearDown(() => root.delete(recursive: true));
+      addTearDown(() => external.delete(recursive: true));
+      final file = File('${external.path}${Platform.pathSeparator}outside.txt');
+      await file.writeAsString('external');
+      // Mimic the multi-agent worker callback: everything non-sensitif is
+      // auto-approved, so any allowed-by-default behavior would let the agent
+      // escape its worktree.
+      var permissionAsked = false;
+      final tools = WorkspaceTools(
+        root: root.path,
+        requestPermission: (_, _) async {
+          permissionAsked = true;
+          return PermissionDecision.allowOnce;
+        },
+        allowWrite: true,
+        allowTerminal: false,
+        approvalMode: ApprovalMode.approveForMe,
+        environment: const {},
+        allowExternalPaths: false,
+      );
+
+      await expectLater(
+        tools.execute('read_file', {'path': file.path}),
+        throwsA(isA<FileSystemException>()),
+      );
+      await expectLater(
+        tools.execute('write_file', {'path': file.path, 'content': 'pwned'}),
+        throwsA(isA<FileSystemException>()),
+      );
+      expect(await file.readAsString(), 'external');
+      expect(permissionAsked, isFalse);
+
+      // Autonomy inside the worktree is unaffected.
+      await tools.execute('write_file', {'path': 'new.txt', 'content': 'ok'});
+      expect(
+        await File(
+          '${root.path}${Platform.pathSeparator}new.txt',
+        ).readAsString(),
+        'ok',
+      );
+    },
+  );
+
   test('allow always mengingat pola edit selama agent hidup', () async {
     final root = await Directory.systemTemp.createTemp('younzcode-tools-');
     addTearDown(() => root.delete(recursive: true));

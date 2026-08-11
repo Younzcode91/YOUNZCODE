@@ -43,6 +43,7 @@ import 'services/multi_agent_service.dart';
 import 'services/workspace_trust_service.dart';
 import 'services/persistent_terminal_service.dart';
 import 'services/quality_gate_service.dart';
+import 'services/update_service.dart';
 import 'services/workspace_checkpoint_store.dart';
 import 'services/workspace_tools.dart';
 import 'ui/browser_panel.dart';
@@ -54,6 +55,7 @@ part 'app/command_workflow.dart';
 part 'app/goal_workflow.dart';
 part 'app/media_document_workflow.dart';
 part 'app/session_workspace_workflow.dart';
+part 'app/update_workflow.dart';
 part 'app/workspace_lifecycle.dart';
 part 'ui/chrome.dart';
 part 'ui/editor.dart';
@@ -66,7 +68,7 @@ part 'ui/overlays.dart';
 const _fastMotion = Duration(milliseconds: 140);
 const _mediumMotion = Duration(milliseconds: 240);
 const _motionCurve = Curves.easeOutCubic;
-const _appVersion = '1.3.5';
+const _appVersion = '1.3.6';
 const _silkyScrollConfig = SilkyScrollConfig(
   silkyScrollDuration: Duration(milliseconds: 700),
   animationCurve: Curves.easeOutCubic,
@@ -149,6 +151,11 @@ const _slashCommands = <_SlashCommand>[
   ),
   _SlashCommand('/plan', 'Enable Plan Mode', Icons.account_tree_outlined),
   _SlashCommand('/build', 'Enable Build Mode', Icons.build_outlined),
+  _SlashCommand(
+    '/update',
+    'Check for application updates',
+    Icons.system_update_alt,
+  ),
 ];
 
 bool _isEnvironmentFileName(String name) =>
@@ -350,6 +357,7 @@ class _AgentHomePageState extends State<AgentHomePage> {
   final _providerRouter = ProviderRoutingService();
   final _providerUsageStore = ProviderUsageStore();
   final _qualityGateService = QualityGateService();
+  final _updateService = const UpdateService();
   final _checkpointStore = WorkspaceCheckpointStore();
   final _documentExtractionService = DocumentExtractionService();
   final _mediaDownloadService = MediaDownloadService();
@@ -414,6 +422,7 @@ class _AgentHomePageState extends State<AgentHomePage> {
   String? _browserInitialUrl;
   String _agentStatus = 'Siap menerima tugas';
   int _timeoutMs = 120000;
+  int _dapTimeoutMs = 30000;
   List<String> _searchResults = [];
   AgentService? _agent;
   CodeIntelligenceService? _codeIntelligence;
@@ -427,6 +436,7 @@ class _AgentHomePageState extends State<AgentHomePage> {
   bool _workspaceTrusted = false;
   bool _budgetWarningShown = false;
   bool _onboardingShown = false;
+  bool _updateChecking = false;
   double _explorerWidth = 260;
   double _inspectorWidth = 260;
   Future<void> _persistenceQueue = Future.value();
@@ -647,6 +657,7 @@ class _AgentHomePageState extends State<AgentHomePage> {
                                                 onShowChat: _showChat,
                                                 workspace: _workspace,
                                                 trusted: _workspaceTrusted,
+                                                dapTimeoutMs: _dapTimeoutMs,
                                               )
                                             : KeyedSubtree(
                                                 key: const ValueKey(

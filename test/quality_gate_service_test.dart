@@ -27,6 +27,31 @@ void main() {
     expect(plan.last.arguments, contains('test/service_test.dart'));
   });
 
+  test('nama file berisi & dan spasi diteruskan literal ke python', () async {
+    if (!await _pythonAvailable()) {
+      markTestSkipped('python tidak tersedia di lingkungan ini.');
+      return;
+    }
+    final root = await Directory.systemTemp.createTemp('younz-quality-');
+    addTearDown(() => root.delete(recursive: true));
+    await File(
+      '${root.path}${Platform.pathSeparator}a & b.py',
+    ).writeAsString('x = 1\n');
+
+    final service = QualityGateService();
+    final result = await service.run(root.path, ['a & b.py']);
+
+    // Dengan runInShell: false, `a & b.py` tetap satu argumen; seandainya
+    // dilewatkan ke cmd, `&` akan memotong perintah dan check gagal.
+    expect(result.checks, hasLength(1));
+    expect(result.checks.single.check.label, 'Python syntax');
+    expect(
+      result.passed,
+      isTrue,
+      reason: 'output: ${result.checks.single.output}',
+    );
+  });
+
   test('berhenti pada quality check pertama yang gagal', () async {
     final root = await Directory.systemTemp.createTemp('younz-quality-');
     addTearDown(() => root.delete(recursive: true));
@@ -51,4 +76,17 @@ void main() {
     expect(result.passed, isFalse);
     expect(runs, 1);
   });
+}
+
+Future<bool> _pythonAvailable() async {
+  try {
+    final result = await Process.run(
+      'python',
+      ['-c', 'import sys'],
+      runInShell: false,
+    );
+    return result.exitCode == 0;
+  } catch (_) {
+    return false;
+  }
 }

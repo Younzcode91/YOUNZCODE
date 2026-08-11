@@ -106,6 +106,37 @@ void main() {
     },
   );
 
+  test('dap timeout disimpan, default 30 detik, dan di-clamp saat save',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final store = SettingsStore();
+
+    // Default when nothing is stored.
+    expect((await store.load()).dapTimeoutMs, 30000);
+
+    // Round-trip a custom value.
+    await store.save(
+      const AppSettings(
+        baseUrl: 'https://example.test/v1',
+        model: 'model',
+        workspace: '',
+        dapTimeoutMs: 60000,
+      ),
+    );
+    expect((await store.load()).dapTimeoutMs, 60000);
+
+    // Out-of-range values are clamped to [5000, 600000] on save.
+    await store.save(
+      const AppSettings(
+        baseUrl: 'https://example.test/v1',
+        model: 'model',
+        workspace: '',
+        dapTimeoutMs: 100,
+      ),
+    );
+    expect((await store.load()).dapTimeoutMs, 5000);
+  });
+
   test('mode approval disimpan dan nilai lama memakai default aman', () async {
     SharedPreferences.setMockInitialValues({});
     final store = SettingsStore();

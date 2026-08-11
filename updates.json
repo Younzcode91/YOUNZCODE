@@ -1,0 +1,13 @@
+{
+  "channel": "stable",
+  "releases": [
+    {
+      "version": "1.3.6",
+      "channel": "stable",
+      "notes": "Rilis 1.3.6: mekanisme update bertanda tangan Ed25519 dengan pemeriksaan otomatis (Model Settings); debug adapter lebih andal — timeout handshake dapat diatur dari Project Settings dan watchdog menampilkan diagnostik saat sesi gagal; peluncuran proses tanpa shell (aman untuk nama file berisi & dan spasi); worker /agents dikurung ke worktree-nya; load test debug adapter di CI.",
+      "download_url": "https://github.com/Younzcode91/YOUNZCODE/releases/download/v1.3.6/YOUNZCODE-Setup-1.3.6.exe",
+      "sha256": "1e41101cd941f96e33d1d65a42acafe0ef5c892c083fdff69b9653bef31a083b",
+      "signature": "ozJP2EQDYv6Z9TvKtrSO+pdvWxqS/n6m3o4OerhhvYYoPhF1xRv38aRYVH6uuNogt1Enkze8HzPZJ45D3mxJBw=="
+    }
+  ]
+}

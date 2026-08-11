@@ -60,6 +60,7 @@ extension _WorkspaceLifecycle on _AgentHomePageState {
       _allowTerminal = settings.allowTerminal;
       _approvalMode = settings.approvalMode;
       _timeoutMs = settings.timeoutMs;
+      _dapTimeoutMs = settings.dapTimeoutMs;
       _chatSessions
         ..clear()
         ..addAll(sessions);

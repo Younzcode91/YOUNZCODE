@@ -1,0 +1,174 @@
+name: DAP tests under load
+
+# Runs the debug-adapter test suite while burning CPU in the background, so
+# debugpy / js-debug cold starts are exercised under contention — the exact
+# condition that produced the historical "Debug adapter stopped" flake.
+# A failure here means a handshake timeout that would also bite real users on
+# slow machines, so treat it as a release blocker.
+
+on:
+  push:
+    paths:
+      - 'lib/**'
+      - 'test/debug_adapter_service_test.dart'
+      - 'tool/cpu_stress.dart'
+      - 'tool/run_dap_load_test.sh'
+      - '.github/workflows/dap-load-test.yml'
+  pull_request:
+    paths:
+      - 'lib/**'
+      - 'test/debug_adapter_service_test.dart'
+      - 'tool/cpu_stress.dart'
+      - 'tool/run_dap_load_test.sh'
+      - '.github/workflows/dap-load-test.yml'
+  workflow_dispatch:
+  # Nightly regression sweep: catches startup-timeout flakes even when no
+  # DAP-related code changed (e.g. runner performance drift, new debugpy /
+  # js-debug releases, or host toolchain upgrades). Runs on the default
+  # branch at 02:00 UTC.
+  schedule:
+    - cron: '0 2 * * *'
+
+concurrency:
+  group: dap-load-test-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dap-under-load:
+    name: DAP tests under CPU stress (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install debugpy (Python DAP adapter)
+        shell: bash
+        run: python -m pip install debugpy
+
+      - name: Download js-debug DAP adapter (pinned release + sha256)
+        shell: bash
+        run: |
+          mkdir -p debug-adapters
+          curl -fsSL -o js-debug-dap.tar.gz \
+            https://github.com/microsoft/vscode-js-debug/releases/download/v1.117.0/js-debug-dap-v1.117.0.tar.gz
+          echo "ad8d04ede9d4b75cc290fd5438a65047a06f786d04f604b6112485b36f090772  js-debug-dap.tar.gz" | sha256sum -c -
+          tar -xzf js-debug-dap.tar.gz -C debug-adapters
+          test -f debug-adapters/js-debug/src/dapDebugServer.js
+
+      - name: Validate HANDSHAKE_FAIL_RATIO gating expression
+        shell: bash
+        # The simulator reads the expression from this workflow file itself,
+        # so a typo in the expression fails here before any merge gating runs.
+        run: dart tool/simulate_gating.dart
+
+      - name: Run DAP tests under artificial CPU load
+        shell: bash
+        env:
+          YOUNZCODE_JS_DEBUG: ${{ github.workspace }}/debug-adapters/js-debug/src/dapDebugServer.js
+          MARGIN_CSV: margins-${{ matrix.os }}.csv
+          MARGIN_OS: ${{ matrix.os }}
+          # Merge-gating: on push/PR runs, fail when a handshake uses >= the
+          # threshold of the timeout budget even though the tests passed. The
+          # nightly schedule keeps this empty so it acts as the drift monitor.
+          # Threshold is tunable via the repo variable HANDSHAKE_FAIL_RATIO.
+          HANDSHAKE_FAIL_RATIO: ${{ (github.event_name == 'pull_request' || github.event_name == 'push') && (vars.HANDSHAKE_FAIL_RATIO || '0.5') || '' }}
+        run: tool/run_dap_load_test.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dap-margins-${{ matrix.os }}
+          path: margins-${{ matrix.os }}.csv
+          if-no-files-found: error
+
+  # Nightly-only: merge the per-OS margin fragments into the repo-tracked
+  # history (`.ci/dap-load-history.csv`) and push it, so drift toward the
+  # timeout is visible across runs before it crosses 1.0. Pushes from
+  # GITHUB_TOKEN do not re-trigger workflows, so there is no recursion.
+  persist-history:
+    name: Persist margin history
+    needs: dap-under-load
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: margins
+          pattern: dap-margins-*
+          merge-multiple: true
+
+      - name: Merge margins into history CSV
+        shell: bash
+        env:
+          HISTORY_ROWS: ${{ vars.HISTORY_ROWS || '366' }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci
+          HISTORY=.ci/dap-load-history.csv
+          if [ ! -f "$HISTORY" ]; then
+            echo "timestamp,os,workers,adapter,totalMs,ratio" > "$HISTORY"
+          fi
+          cat margins/*.csv >> "$HISTORY"
+          # Keep the file bounded: header + the most recent HISTORY_ROWS rows.
+          head -n 1 "$HISTORY" > "$HISTORY.tmp"
+          tail -n "$HISTORY_ROWS" "$HISTORY" >> "$HISTORY.tmp"
+          mv "$HISTORY.tmp" "$HISTORY"
+
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .ci/dap-load-history.csv
+          if git diff --cached --quiet; then
+            echo "No history change to commit."
+          else
+            git commit -m "ci: update DAP load-test margin history"
+            # A commit landing on main between checkout and push would
+            # otherwise fail the push; rebase first (only the CSV changes).
+            git pull --rebase --autostash
+            git push
+          fi
+
+      - name: Check for margin drift (flags the nightly run)
+        id: drift-check
+        shell: bash
+        env:
+          DRIFT_WINDOW: ${{ vars.DRIFT_WINDOW || '7' }}
+          DRIFT_RATIO: ${{ vars.DRIFT_RATIO || '0.35' }}
+        # Runs last so the history is still committed and pushed even when
+        # drift is flagged; a non-zero exit fails this job, surfacing the
+        # flag in the Actions tab.
+        run: python3 tool/check_drift.py .ci/dap-load-history.csv --report drift-report.json
+
+      - name: Notify when drift is flagged
+        if: always()
+        shell: bash
+        env:
+          DRIFT_REPORT: drift-report.json
+          # Set the Slack webhook URL secret to post drift alerts to a channel.
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          # Set the DRIFT_DISPATCH repo variable to '1' to fire a
+          # repository_dispatch (dap-load-drift) that a consuming workflow
+          # can act on (e.g. open an issue).
+          DISPATCH: ${{ vars.DRIFT_DISPATCH }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          HISTORY_URL: ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/.ci/dap-load-history.csv
+        run: bash tool/notify_drift.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dap-load-history
+          path: .ci/dap-load-history.csv

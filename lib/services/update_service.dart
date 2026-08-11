@@ -4,12 +4,27 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:http/http.dart' as http;
 
+/// URL of the release manifest the app checks for updates against.
+/// Must be HTTPS; the host must be in [updateAllowedHosts]. Publish
+/// `updates.json` at this location (raw.githubusercontent.com serves the
+/// repo's main branch directly).
+const updateManifestUrl =
+    'https://raw.githubusercontent.com/Younzcode91/YOUNZCODE/main/updates.json';
+
+/// Channel this build tracks. The manifest may list multiple channels; only
+/// releases matching this channel are considered.
+const updateChannel = 'stable';
+
+/// Hosts allowed to serve the manifest and installer downloads.
+const updateAllowedHosts = <String>['raw.githubusercontent.com', 'github.com'];
+
 /// Base64-encoded Ed25519 public key that release manifests are signed with.
-/// Empty by default: generate a keypair, sign each manifest's canonical payload
-/// (see [UpdateService.canonicalUpdatePayload]) with the private key, publish
-/// the signature as the manifest `signature` field, and paste the public key
-/// here. Once set, unsigned or tampered updates are rejected.
-const updateSigningPublicKey = '';
+/// Generate the keypair with `dart run tool/update_keys.dart`, sign each
+/// manifest's canonical payload (see
+/// [UpdateService.canonicalUpdatePayload]) with the private key via
+/// `dart run tool/sign_update.dart`, and keep this value in sync with the
+/// private key. Once set, unsigned or tampered updates are rejected.
+const updateSigningPublicKey = 'sCshyfPyPgyUnsmtc3fK1oWeTXj2szd3sckqv5R/0eU=';
 
 class AppUpdate {
   const AppUpdate({
@@ -41,7 +56,10 @@ class AppUpdate {
 class UpdateService {
   const UpdateService({
     this.signingPublicKeyBase64 = updateSigningPublicKey,
-    this.allowedHosts = const [],
+    this.allowedHosts = updateAllowedHosts,
+    this.manifestUrl = updateManifestUrl,
+    this.channel = updateChannel,
+    this.httpClient,
   });
 
   /// Ed25519 public key updates must be signed with. Empty disables signature
@@ -51,17 +69,31 @@ class UpdateService {
   /// If non-empty, the manifest and download hosts must be in this allowlist.
   final List<String> allowedHosts;
 
+  /// Default manifest URL when [check] is called without one.
+  final String manifestUrl;
+
+  /// Default channel when [check] is called without one.
+  final String channel;
+
+  /// Injectable HTTP client (mainly for tests); defaults to a shared client.
+  final http.Client? httpClient;
+
+  http.Client get _client => httpClient ?? _sharedClient;
+  static final http.Client _sharedClient = http.Client();
+
   Future<AppUpdate?> check({
-    required String manifestUrl,
-    required String channel,
+    String? manifestUrl,
+    String? channel,
     required String currentVersion,
   }) async {
-    final manifestUri = Uri.parse(manifestUrl);
+    final effectiveManifestUrl = manifestUrl ?? this.manifestUrl;
+    final effectiveChannel = channel ?? this.channel;
+    final manifestUri = Uri.parse(effectiveManifestUrl);
     if (manifestUri.scheme != 'https') {
       throw const FormatException('URL manifest update harus memakai HTTPS.');
     }
     _requireAllowedHost(manifestUri, 'Manifest');
-    final response = await http
+    final response = await _client
         .get(manifestUri)
         .timeout(const Duration(seconds: 15));
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -77,12 +109,18 @@ class UpdateService {
         entries
             .whereType<Map>()
             .map((item) => AppUpdate.fromJson(Map<String, dynamic>.from(item)))
-            .where((item) => item.channel == channel)
+            .where((item) => item.channel == effectiveChannel)
             .toList()
           ..sort((left, right) => compareVersions(right.version, left.version));
     if (releases.isEmpty ||
         compareVersions(releases.first.version, currentVersion) <= 0) {
       return null;
+    }
+    // Only a validly signed release may be presented as available; a tampered
+    // manifest must not even reach the user as an install offer.
+    if (signingPublicKeyBase64.isNotEmpty &&
+        !await verifySignature(releases.first, signingPublicKeyBase64)) {
+      throw StateError('Tanda tangan update tidak valid atau tidak ada.');
     }
     return releases.first;
   }
@@ -104,7 +142,7 @@ class UpdateService {
         !await verifySignature(update, signingPublicKeyBase64)) {
       throw StateError('Tanda tangan update tidak valid atau tidak ada.');
     }
-    final response = await http
+    final response = await _client
         .get(downloadUri)
         .timeout(const Duration(minutes: 5));
     if (response.statusCode < 200 || response.statusCode >= 300) {

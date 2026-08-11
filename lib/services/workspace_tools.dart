@@ -42,6 +42,7 @@ class WorkspaceTools {
     this.onChangesChanged,
     this.stageEdits = false,
     this.browser,
+    this.allowExternalPaths = true,
     Map<String, ToolPermissionPolicy> toolPermissionPolicies = const {},
     this.onToolPermissionChanged,
   }) : toolPermissionPolicies = Map.of(toolPermissionPolicies) {
@@ -62,6 +63,12 @@ class WorkspaceTools {
   final WorkspaceChangesChanged? onChangesChanged;
   final bool stageEdits;
   final BrowserAutomation? browser;
+
+  /// When false, any path outside [root] is rejected outright instead of
+  /// being offered for approval. Used to keep isolated multi-agent workers
+  /// strictly inside their own worktree even when the permission callback
+  /// would auto-approve external access.
+  final bool allowExternalPaths;
   final Map<String, ToolPermissionPolicy> toolPermissionPolicies;
   final ToolPermissionChanged? onToolPermissionChanged;
   final Map<String, ({McpClient client, String tool})> _mcpAliases = {};
@@ -494,9 +501,19 @@ class WorkspaceTools {
           ? requestedPath
           : path.join(rootPath, requestedPath),
     );
+    final external =
+        !path.equals(candidate, rootPath) &&
+        !path.isWithin(rootPath, candidate);
+    // Hard guarantee for isolated workers: external paths are never reachable,
+    // regardless of approval mode or how permissive the permission callback is.
+    if (external && !allowExternalPaths) {
+      throw FileSystemException(
+        'Akses di luar workspace ditolak: izin eksternal dinonaktifkan.',
+        candidate,
+      );
+    }
     if (approvalMode == ApprovalMode.fullAccess) return candidate;
-    if (!path.equals(candidate, rootPath) &&
-        !path.isWithin(rootPath, candidate)) {
+    if (external) {
       final directory = await FileSystemEntity.isDirectory(candidate)
           ? candidate
           : path.dirname(candidate);

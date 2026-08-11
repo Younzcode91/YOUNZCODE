@@ -16,6 +16,7 @@ extension _AgentConfiguration on _AgentHomePageState {
       outputCostPerMillion: _outputCostPerMillion,
       monthlyTokenBudget: _monthlyTokenBudget,
       qualityGateEnabled: _qualityGateEnabled,
+      dapTimeoutMs: _dapTimeoutMs,
     ),
   );
 
@@ -412,6 +413,7 @@ extension _AgentConfiguration on _AgentHomePageState {
         inputCostPerMillion: _inputCostPerMillion,
         outputCostPerMillion: _outputCostPerMillion,
         monthlyTokenBudget: _monthlyTokenBudget,
+        onCheckForUpdates: _checkForUpdates,
       ),
     );
     if (result == null) return;
@@ -489,6 +491,7 @@ extension _AgentConfiguration on _AgentHomePageState {
         model: _model,
         apiKey: _apiKey,
         timeoutMs: _timeoutMs,
+        dapTimeoutMs: _dapTimeoutMs,
         headers: _apiHeaders,
         onSave:
             (
@@ -521,6 +524,7 @@ extension _AgentConfiguration on _AgentHomePageState {
                 _apiKey = api.apiKey;
                 _providerVerified = false;
                 _timeoutMs = api.timeoutMs;
+                _dapTimeoutMs = api.dapTimeoutMs;
                 _apiHeaders
                   ..clear()
                   ..addAll(api.headers);
