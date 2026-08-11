@@ -141,29 +141,32 @@ jobs:
           fi
           DOWNLOAD_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VER}/YOUNZCODE-Setup-${VER}.exe"
           export VER RELEASE_NOTES DOWNLOAD_URL SHA256
+          # YAML block scalars strip the common indent before bash runs the
+          # script, so the heredoc body stays inside the scalar (column 0 here
+          # would terminate it and break the workflow file).
           python - <<'PY'
-import json, os
-ver = os.environ['VER']
-entry = {
-    "version": ver,
-    "channel": "stable",
-    "notes": os.environ['RELEASE_NOTES'],
-    "download_url": os.environ['DOWNLOAD_URL'],
-    "sha256": os.environ['SHA256'],
-    "signature": "",
-    "signatures": [],
-}
-with open('updates.json', encoding='utf-8') as f:
-    manifest = json.load(f)
-# Replace any existing entry with the same version (idempotent re-runs).
-manifest['releases'] = [
-    r for r in manifest['releases'] if r.get('version') != ver
-] + [entry]
-with open('updates.json', 'w', encoding='utf-8') as f:
-    json.dump(manifest, f, ensure_ascii=False, indent=2)
-    f.write('\n')
-print(f"Added release {ver} to updates.json")
-PY
+          import json, os
+          ver = os.environ['VER']
+          entry = {
+              "version": ver,
+              "channel": "stable",
+              "notes": os.environ['RELEASE_NOTES'],
+              "download_url": os.environ['DOWNLOAD_URL'],
+              "sha256": os.environ['SHA256'],
+              "signature": "",
+              "signatures": [],
+          }
+          with open('updates.json', encoding='utf-8') as f:
+              manifest = json.load(f)
+          # Replace any existing entry with the same version (idempotent re-runs).
+          manifest['releases'] = [
+              r for r in manifest['releases'] if r.get('version') != ver
+          ] + [entry]
+          with open('updates.json', 'w', encoding='utf-8') as f:
+              json.dump(manifest, f, ensure_ascii=False, indent=2)
+              f.write('\n')
+          print(f"Added release {ver} to updates.json")
+          PY
 
       - name: Restore signing keys from secrets
         shell: bash
