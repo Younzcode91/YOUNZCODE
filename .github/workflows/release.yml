@@ -47,7 +47,9 @@ jobs:
     name: Build, sign, and publish release
     runs-on: windows-latest
     permissions:
+      actions: write
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -232,10 +234,11 @@ jobs:
           flutter test test/security_update_test.dart \
             test/backup_receipt_test.dart test/retire_signing_key_test.dart
 
-      - name: Publish updates.json to the manifest branch
+      - name: Publish updates.json through a protected-branch PR
         shell: bash
         env:
           MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           VER="$VER"
@@ -248,34 +251,30 @@ jobs:
           # that serves updates.json). Never force-push.
           git merge-base --is-ancestor "origin/$BRANCH" HEAD \
             || { echo "::error::Tag tidak berada di atas origin/$BRANCH — manifest harus dipublikasikan manual."; exit 1; }
-          git checkout -B "ci-release-$VER"
+          RELEASE_BRANCH="ci-release-$VER"
+          git checkout -B "$RELEASE_BRANCH"
           git add updates.json
           git diff --cached --quiet \
             && echo "updates.json tidak berubah (sudah terpublikasi?)" \
             || git commit -m "release $VER: manifest ditandatangani"
-          git push origin "ci-release-$VER:$BRANCH"
-          echo "updates.json dipublikasikan ke $BRANCH"
-
-      - name: Keep main in sync with the manifest branch
-        shell: bash
-        env:
-          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
-        run: |
-          set -euo pipefail
-          BRANCH="$MANIFEST_BRANCH"
-          if [ "$BRANCH" = "main" ]; then
-            echo "Cabang manifest == main - sudah sinkron."
-            exit 0
+          git push --force-with-lease origin "HEAD:$RELEASE_BRANCH"
+          PR_URL=$(gh pr list --head "$RELEASE_BRANCH" --base "$BRANCH" --state open --json url --jq '.[0].url')
+          if [ -z "$PR_URL" ]; then
+            PR_URL=$(gh pr create \
+              --base "$BRANCH" \
+              --head "$RELEASE_BRANCH" \
+              --title "release $VER: publish signed manifest" \
+              --body "Automated signed-manifest publication for v$VER.")
           fi
-          # The manifest commit moved the branch past the tag; fast-forward
-          # main so the next tag's sync check (tag == main == manifest
-          # branch at tag time) starts clean. Refuses to touch main if it is
-          # not an ancestor of the manifest branch (someone else moved it).
-          git fetch origin main "$BRANCH"
-          git merge-base --is-ancestor origin/main "origin/$BRANCH" \
-            || { echo "::error::main tidak menjadi ancestor $BRANCH - sinkronisasi manual diperlukan."; exit 1; }
-          git push origin "origin/$BRANCH:main"
-          echo "main di-fast-forward ke $BRANCH"
+          # PRs created with GITHUB_TOKEN do not start other workflows.
+          # Dispatch both required checks explicitly, then merge through the
+          # same branch protection applied to human changes.
+          gh workflow run quality.yml --ref "$RELEASE_BRANCH"
+          gh workflow run workflow-lint.yml --ref "$RELEASE_BRANCH"
+          gh pr checks "$PR_URL" --watch --fail-fast
+          gh pr merge "$PR_URL" --squash --delete-branch
+          git fetch origin "$BRANCH"
+          echo "updates.json dipublikasikan ke $BRANCH melalui PR terverifikasi"
 
       - name: Mirror manifest for pre-main clients
         shell: bash

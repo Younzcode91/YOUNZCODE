@@ -40,6 +40,16 @@ Future<Directory> _workflowDir() async {
 }
 
 void main() {
+  test('release memublikasikan manifest lewat PR yang dilindungi', () {
+    final workflow = File('.github/workflows/release.yml').readAsStringSync();
+    expect(workflow, contains('Publish updates.json through a protected-branch PR'));
+    expect(workflow, contains('gh workflow run quality.yml'));
+    expect(workflow, contains('gh workflow run workflow-lint.yml'));
+    expect(workflow, contains('gh pr checks "\$PR_URL" --watch --fail-fast'));
+    expect(workflow, contains('gh pr merge "\$PR_URL" --squash'));
+    expect(workflow, isNot(contains('HEAD:\$BRANCH')));
+  });
+
   test('release memirror manifest ke branch legacy untuk klien lama', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     expect(workflow, contains('Mirror manifest for pre-main clients'));
