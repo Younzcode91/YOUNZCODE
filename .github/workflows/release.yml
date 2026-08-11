@@ -15,8 +15,8 @@ name: Release pipeline
 #                           that key is retired so only the survivor signs.
 # Optional variables:
 #   MANIFEST_BRANCH       - branch that serves updates.json to the in-app
-#                           check (default: main — matches
-#                           updateManifestUrl in update_service.dart)
+#                           check (default: the repo default branch — keep in
+#                           sync with updateManifestUrl in update_service.dart)
 #   RELEASE_NOTES         - notes for the release (default: generated)
 #
 # Before tagging, the source must already be prepared (as in the manual flow):
@@ -216,7 +216,7 @@ PY
       - name: Publish updates.json to the manifest branch
         shell: bash
         env:
-          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || 'main' }}
+          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           VER="$VER"

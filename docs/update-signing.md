@@ -181,10 +181,10 @@ whole signing part of a release:
 6. **Verify** — `tool/e2e_update_check.dart --manifest updates.json
    --expect-version <tag>` checks the signed manifest against the baked-in key
    ring before anything is published; the signing-related test suites run.
-7. **Publish** — commit `updates.json` to the manifest branch (default `main`,
-   matching `updateManifestUrl`; override with the `MANIFEST_BRANCH` repo
-   variable) using a fast-forward-only push, and create the GitHub release with
-   the installer attached (`gh release create`).
+7. **Publish** — commit `updates.json` to the manifest branch (default: the
+   repo default branch, matching `updateManifestUrl`; override with the
+   `MANIFEST_BRANCH` repo variable) using a fast-forward-only push, and create
+   the GitHub release with the installer attached (`gh release create`).
 8. **Live E2E** — the real in-app path is checked against the published
    manifest and release asset, with retries for CDN propagation.
 

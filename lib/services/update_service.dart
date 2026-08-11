@@ -6,10 +6,13 @@ import 'package:http/http.dart' as http;
 
 /// URL of the release manifest the app checks for updates against.
 /// Must be HTTPS; the host must be in [updateAllowedHosts]. Publish
-/// `updates.json` at this location (raw.githubusercontent.com serves the
-/// repo's main branch directly).
+/// `updates.json` at this location — raw.githubusercontent.com serves the
+/// repo's DEFAULT branch directly, so keep this path in sync with the
+/// branch the release pipeline publishes to (release.yml MANIFEST_BRANCH,
+/// which defaults to the repo default branch).
 const updateManifestUrl =
-    'https://raw.githubusercontent.com/Younzcode91/YOUNZCODE/main/updates.json';
+    'https://raw.githubusercontent.com/Younzcode91/YOUNZCODE/'
+    'feature/multiprovider-and-polish/updates.json';
 
 /// Channel this build tracks. The manifest may list multiple channels; only
 /// releases matching this channel are considered.
