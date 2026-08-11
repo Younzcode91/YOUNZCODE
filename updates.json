@@ -22,18 +22,18 @@
     {
       "version": "1.3.7",
       "channel": "stable",
-      "notes": "Rilis 1.3.7: key ring penandatanganan ganda (Ed25519) — manifest ditandatangani dua kunci, kunci lama tetap menjadi legacy field untuk klien pra-ring; diagnostik update di aplikasi (/update-status) menampilkan kunci yang memverifikasi pembaruan terakhir, hasil pemeriksaan, dan latensi; telemetri update opt-in (ping adopsi fleet untuk gate retire kunci).",
+      "notes": "Rilis 1.3.7: transisi key ring - build dan tanda tangan otomatis.",
       "download_url": "https://github.com/Younzcode91/YOUNZCODE/releases/download/v1.3.7/YOUNZCODE-Setup-1.3.7.exe",
-      "sha256": "7abc9dbdc73e4c5f6403be6446c51bfb95f583fc80e08d62260dccf8486adc4b",
-      "signature": "0rhsKydvJqwsCdTnNp7dxm75CZdvzVXQqrOWCqEfwI9/yvBN2VAi1NznP4nXTBRDIHp6CWaEucvnBPw3mlbbBw==",
+      "sha256": "41bcc2882617a5ef51f4112d19112e1d94927e3fac789c4bc0aeea294ebeee07",
+      "signature": "27ZE6gvzOMTKYiWitYMyU/CxzMkqfXnWgQnqy/7W115ovhcxGPvgo3hNfJYjPdyCg8AsNUxZY06ydy1c39w4BQ==",
       "signatures": [
         {
           "public_key": "sCshyfPyPgyUnsmtc3fK1oWeTXj2szd3sckqv5R/0eU=",
-          "signature": "0rhsKydvJqwsCdTnNp7dxm75CZdvzVXQqrOWCqEfwI9/yvBN2VAi1NznP4nXTBRDIHp6CWaEucvnBPw3mlbbBw=="
+          "signature": "27ZE6gvzOMTKYiWitYMyU/CxzMkqfXnWgQnqy/7W115ovhcxGPvgo3hNfJYjPdyCg8AsNUxZY06ydy1c39w4BQ=="
         },
         {
           "public_key": "KRtmNU7aHdQ2tkrylk8wdO6D7iamMpuORru4q7FDBdA=",
-          "signature": "XOcT9ULoV/mkLoscnBdUP4Puxj1xGETnmLi6qm5qvnFUt6zKjRhg8hf0pErS/EPmzaT4lGIRFcSHTnj/8MBvCg=="
+          "signature": "JPo4vByuQfoMU3GwIoA3+X710CCBDuh4DcoifOcFjW/IjjhPZVYjMRWIYATNF7TGMzz2oyIY6pUUo7EoS9xlAA=="
         }
       ]
     }
