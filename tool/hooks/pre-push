@@ -1,0 +1,40 @@
+#!/bin/sh
+# Pre-push hook: refuse to push a v* tag while any .github/workflows/*.yml
+# fails to parse (or lacks the required `on`/`jobs` keys). A broken workflow
+# is silently ignored by GitHub — the release pipeline would never run — so
+# this catches it before the tag leaves the machine.
+#
+# Installed by `bash tool/install_git_hooks.sh` (sets core.hooksPath to
+# tool/hooks). Run with the compiled checker when present, else `dart run`.
+set -u
+
+repo_root=$(git rev-parse --show-toplevel)
+[ -n "$repo_root" ] || exit 0
+
+# stdin from git: <local ref> <local oid> <remote ref> <remote oid> per line.
+wants_tag=0
+while IFS= read -r local_ref _remote_ref _local_oid _remote_oid; do
+  case "$local_ref" in
+    refs/tags/v*) wants_tag=1 ;;
+  esac
+done
+
+[ "$wants_tag" = "1" ] || exit 0
+
+checker="$repo_root/build/tools/check_workflows"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) checker="$checker.exe" ;;
+esac
+
+if [ -x "$checker" ]; then
+  "$checker" --dir "$repo_root/.github/workflows"
+else
+  (cd "$repo_root" && dart run tool/check_workflows.dart)
+fi
+status=$?
+
+if [ "$status" -ne 0 ]; then
+  echo "pre-push: DITOLAK — workflow YAML bermasalah; perbaiki sebelum push tag." >&2
+  exit 1
+fi
+exit 0

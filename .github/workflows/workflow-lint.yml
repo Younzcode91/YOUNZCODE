@@ -1,0 +1,36 @@
+name: Workflow lint
+
+# Validates that every .github/workflows/*.yml parses and has the required
+# `on`/`jobs` keys. GitHub silently ignores a workflow whose YAML does not
+# parse — the release pipeline would never register, and a v* tag would ship
+# with no build/sign/release. This job runs on every push and PR so a broken
+# workflow is caught before it can be tagged, and again on v* tags as the
+# final gate (the local pre-push hook, tool/hooks/pre-push, catches it even
+# earlier on the tagging machine).
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-workflows:
+    name: Validate workflow YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Precompile tool (fast, ~80ms invocation)
+        shell: bash
+        run: bash tool/build_tools.sh
+
+      - name: Check all workflow files parse
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build/tools/check_workflows --dir .github/workflows

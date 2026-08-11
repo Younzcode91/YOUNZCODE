@@ -174,6 +174,8 @@ Push tag `vX.Y.Z` (mis. `v1.3.7`) memicu `.github/workflows/release.yml`: memban
 
 Sebelum men-tag, pastikan versi sudah di-bump di `pubspec.yaml`, `lib/main.dart`, dan `installer/YOUNZCODE.iss`, serta receipt backup kunci segar sudah di-commit (`.ci/signing-backup-receipt.json`). Pipeline memvalidasi semuanya dan gagal cepat bila ada yang belum disiapkan. Lihat `docs/update-signing.md` untuk detail secret dan alur.
 
+**Pengaman workflow**: GitHub diam-diam mengabaikan workflow yang YAML-nya tidak bisa di-parse (pipeline rilis tidak akan pernah jalan, tanpa error). Untuk mencegahnya: (1) pasang hook lokal sekali dengan `bash tool/install_git_hooks.sh` — hook `pre-push` menolak push tag `v*` bila ada `.github/workflows/*.yml` yang rusak; (2) CI menjalankan cek yang sama via `.github/workflows/workflow-lint.yml` (setiap push/PR) dan sebagai langkah pertama `release-gate.yml` (setiap tag). Validator: `dart run tool/check_workflows.dart`.
+
 ---
 
 ## 📁 Struktur Project

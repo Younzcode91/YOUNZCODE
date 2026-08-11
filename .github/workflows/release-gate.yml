@@ -33,6 +33,16 @@ jobs:
           channel: stable
           cache: true
 
+      - name: Check all workflow files parse
+        shell: bash
+        # A workflow whose YAML does not parse is silently ignored by GitHub —
+        # this tag's own pipeline would never run. Fail the gate before
+        # anything else.
+        run: |
+          set -euo pipefail
+          bash tool/build_tools.sh
+          ./build/tools/check_workflows --dir .github/workflows
+
       - name: Check backup receipt (missing / stale / out-of-sync)
         shell: bash
         env:
