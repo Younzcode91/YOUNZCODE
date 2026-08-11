@@ -101,10 +101,10 @@ jobs:
           MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          # Fail fast before the expensive build: the tag must sit exactly on
-          # the tip of main and the manifest branch (the invariant the
-          # publish step's fast-forward safety relies on) and carry the
-          # release workflows.
+          # Fail fast before the expensive build: main must equal the tag,
+          # the manifest branch must contain the tag (equal or ahead - the
+          # publish step's fast-forward safety relies on the branch being an
+          # ancestor of the tag), and the tag must carry the release workflows.
           git fetch origin --tags --prune
           dart run tool/check_tag_sync.dart \
             --tag "v$VER" \
@@ -256,7 +256,28 @@ jobs:
           git push origin "ci-release-$VER:$BRANCH"
           echo "updates.json dipublikasikan ke $BRANCH"
 
-      - name: Create GitHub release
+      - name: Keep main in sync with the manifest branch
+        shell: bash
+        env:
+          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          BRANCH="$MANIFEST_BRANCH"
+          if [ "$BRANCH" = "main" ]; then
+            echo "Cabang manifest == main - sudah sinkron."
+            exit 0
+          fi
+          # The manifest commit moved the branch past the tag; fast-forward
+          # main so the next tag's sync check (tag == main == manifest
+          # branch at tag time) starts clean. Refuses to touch main if it is
+          # not an ancestor of the manifest branch (someone else moved it).
+          git fetch origin main "$BRANCH"
+          git merge-base --is-ancestor origin/main "origin/$BRANCH" \
+            || { echo "::error::main tidak menjadi ancestor $BRANCH - sinkronisasi manual diperlukan."; exit 1; }
+          git push origin "origin/$BRANCH:main"
+          echo "main di-fast-forward ke $BRANCH"
+
+      - name: Create GitHub release (idempotent)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -270,10 +291,16 @@ jobs:
             RELEASE_NOTES="Rilis $VER: build Windows, manifest ditandatangani dengan kunci penandatanganan yang bertahan."
           fi
           INSTALLER="installer/output/YOUNZCODE-Setup-$VER.exe"
-          gh release create "v$VER" "$INSTALLER" \
-            --title "YOUNZCODE v$VER" \
-            --notes "$RELEASE_NOTES"
-          echo "Release v$VER dibuat dengan $INSTALLER"
+          if gh release view "v$VER" >/dev/null 2>&1; then
+            echo "Release v$VER sudah ada - perbarui aset/title bila berbeda."
+            gh release upload "v$VER" "$INSTALLER" --clobber >/dev/null 2>&1 || true
+            gh release edit "v$VER" --title "YOUNZCODE v$VER" --notes "$RELEASE_NOTES" >/dev/null
+          else
+            gh release create "v$VER" "$INSTALLER" \
+              --title "YOUNZCODE v$VER" \
+              --notes "$RELEASE_NOTES"
+          fi
+          echo "Release v$VER siap dengan $INSTALLER"
 
       - name: Verify live update path (retry for CDN propagation)
         shell: bash

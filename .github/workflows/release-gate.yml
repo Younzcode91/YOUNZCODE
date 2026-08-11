@@ -49,9 +49,10 @@ jobs:
           MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
         run: |
           set -euo pipefail
-          # The tag is the release artifact: it must sit exactly on the tip of
-          # both main and the branch that serves updates.json, and carry the
-          # release workflows (otherwise this tag's own pipeline can't run).
+          # The tag is the release artifact: main must equal the tag, the
+          # branch serving updates.json must contain the tag (equal or ahead -
+          # publishes move it forward), and the tag must carry the release
+          # workflows (otherwise this tag's own pipeline can't run).
           if [ "${{ github.event_name }}" != "push" ]; then
             echo "workflow_dispatch: tag sync tidak dapat diverifikasi - dilewati."
             exit 0

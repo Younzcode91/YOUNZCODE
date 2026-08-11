@@ -166,11 +166,16 @@ re-verify them whenever a key is touched.
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which automates the
 whole signing part of a release:
 
-1. **Tag-sync invariant** — the tag must sit exactly on the tip of both `main`
-   and the manifest branch, and its tree must carry the release workflows
-   (`tool/check_tag_sync.dart`, run as an early step in `release-gate.yml` and
-   as a fail-fast in `release.yml`). A tag that drifted from either branch
-   would build a release that disagrees with the published manifest.
+1. **Tag-sync invariant** — `main` must equal the tag, the manifest branch
+   must contain the tag (equal or ahead — the pipeline publishes the signed
+   manifest onto it after building, which legitimately moves it forward; a
+   branch that is behind or unrelated fails), and the tag's tree must carry
+   the release workflows (`tool/check_tag_sync.dart`, run as an early step in
+   `release-gate.yml` and as a fail-fast in `release.yml`). After publishing,
+   the pipeline fast-forwards `main` to the manifest branch so the next
+   release starts from a synced state. A tag that drifted from `main` or a
+   manifest branch that lacks the tag would build a release that disagrees
+   with the published manifest.
 2. **Validate preparation** — the tag version must already be baked into
    `pubspec.yaml`, `lib/main.dart`, and `installer/YOUNZCODE.iss`; the signing
    backup receipt must be fresh and committed. Fails fast otherwise.
@@ -205,8 +210,8 @@ Manual releases (or pre-tag preparation for the pipeline):
 - [ ] Passphrase stored in the password manager
 - [ ] `.ci/signing-backup-receipt.json` updated and committed
 - [ ] Tag sync check passes — `dart run tool/check_tag_sync.dart --tag vX.Y.Z
-      --main main --branch <cabang-manifest>` (tag == main == manifest branch,
-      workflows present at the tag)
+      --main main --branch <cabang-manifest>` (main == tag, manifest branch
+      contains the tag, workflows present at the tag)
 - [ ] Release gate (`.github/workflows/release-gate.yml`) passes on the `v*` tag
 - [ ] `dart run tool/sign_update.dart` (add `--key` per rotation key) — manifest
       signed, no warnings, `signatures` array populated

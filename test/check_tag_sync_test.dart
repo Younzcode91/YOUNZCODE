@@ -169,7 +169,7 @@ void main() {
     expect(result.stderr, contains('main'));
   });
 
-  test('cabang manifest tertinggal: FAIL', () async {
+  test('cabang manifest tertinggal (tidak memuat tag): FAIL', () async {
     final repo = await _repo(manifestStale: true);
     final result = await _check(repo, [
       '--tag',
@@ -181,6 +181,41 @@ void main() {
     ]);
     expect(result.exitCode, isNot(0));
     expect(result.stderr, contains('manifest'));
+  });
+
+  test('cabang manifest di depan tag (memuat tag): PASS', () async {
+    final repo = await _repo();
+    // The pipeline publishes the signed manifest onto the manifest branch
+    // after building from the tag, legitimately moving it ahead of the tag.
+    File('${repo.path}/updates.json').writeAsStringSync('{"releases": []}');
+    final result = await Process.run('git', [
+      'add',
+      '-A',
+    ], workingDirectory: repo.path);
+    expect(result.exitCode, 0);
+    final commit = await Process.run('git', [
+      'commit',
+      '-m',
+      'release v1.0.0: manifest ditandatangani',
+      '--no-gpg-sign',
+    ], workingDirectory: repo.path);
+    expect(commit.exitCode, 0);
+    await Process.run('git', [
+      'update-ref',
+      'refs/remotes/origin/feature/manifest-branch',
+      'HEAD',
+    ], workingDirectory: repo.path);
+
+    final check = await _check(repo, [
+      '--tag',
+      'v1.0.0',
+      '--branch',
+      'feature/manifest-branch',
+      '--main',
+      'main',
+    ]);
+    expect(check.exitCode, 0, reason: '${check.stdout}\n${check.stderr}');
+    expect(check.stdout, contains('SYNC: PASS'));
   });
 
   test('main tertinggal: FAIL', () async {

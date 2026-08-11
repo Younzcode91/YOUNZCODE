@@ -1,15 +1,21 @@
 import 'dart:io';
 
-/// Verifies that a release tag, `main`, and the manifest-serving branch point
-/// at the same commit, and that the tag's tree carries the release workflows.
+/// Verifies that a release tag is a proper release artifact: `main` points at
+/// the tag's commit, the manifest-serving branch contains the tag, and the
+/// tag's tree carries the release workflows.
 ///
 /// A release tag is the artifact the release pipeline builds from, and
 /// `updates.json` is published from it onto the manifest branch (the branch
-/// `updateManifestUrl` in update_service.dart serves). If the tag, main, and
-/// the manifest branch disagree about which commit is "the release", the
-/// published manifest and the built installer can silently diverge. This tool
-/// makes that impossible: every `v*` tag must sit exactly on the tip of both
-/// `main` and the manifest branch, with the workflows present at the tag.
+/// `updateManifestUrl` in update_service.dart serves). If `main` drifted from
+/// the tag, or the manifest branch is behind/unrelated to the tag, the
+/// published manifest and the built installer can silently diverge.
+///
+/// The manifest branch is allowed to be AHEAD of the tag: the pipeline
+/// publishes the signed manifest onto it after building from the tag, which
+/// legitimately moves it forward. What must never happen is the manifest
+/// branch being behind the tag (it would not contain this release) or on an
+/// unrelated line. `main` must equal the tag strictly - the tag is the
+/// release source of truth.
 ///
 /// Usage:
 ///   dart run tool/check_tag_sync.dart \
@@ -74,16 +80,12 @@ Future<void> main(List<String> args) async {
       '${_short(mainCommit)}',
     );
   }
-  if (tagCommit != manifestCommit) {
+  // The manifest branch must contain the tag (equal or ahead). A branch that
+  // is behind or unrelated does not serve this release's manifest.
+  if (!await _isAncestor(tagCommit, manifestCommit)) {
     problems.add(
-      'tag $tag menunjuk ${_short(tagCommit)}, tapi cabang manifest '
-      '$manifestBranch menunjuk ${_short(manifestCommit)}',
-    );
-  }
-  if (mainCommit != manifestCommit) {
-    problems.add(
-      'main (${_short(mainCommit)}) dan cabang manifest '
-      '$manifestBranch (${_short(manifestCommit)}) tidak sinkron',
+      'cabang manifest $manifestBranch (${_short(manifestCommit)}) tidak '
+      'memuat tag $tag (${_short(tagCommit)})',
     );
   }
 
@@ -106,7 +108,7 @@ Future<void> main(List<String> args) async {
 
   if (problems.isEmpty) {
     stdout.writeln(
-      'SYNC: PASS - tag, main, dan cabang manifest satu commit; '
+      'SYNC: PASS - tag == main dan cabang manifest memuat tag; '
       'workflow rilis ada di tag.',
     );
     return;
@@ -135,6 +137,17 @@ Future<bool> _tagHasFile(String tag, String path) async {
     'cat-file',
     '-e',
     '$tag:$path',
+  ], runInShell: false);
+  return result.exitCode == 0;
+}
+
+/// Whether [ancestor] is an ancestor of (or equal to) [descendant].
+Future<bool> _isAncestor(String ancestor, String descendant) async {
+  final result = await Process.run('git', [
+    'merge-base',
+    '--is-ancestor',
+    ancestor,
+    descendant,
   ], runInShell: false);
   return result.exitCode == 0;
 }
