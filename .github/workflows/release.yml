@@ -277,6 +277,25 @@ jobs:
           git push origin "origin/$BRANCH:main"
           echo "main di-fast-forward ke $BRANCH"
 
+      - name: Mirror manifest for pre-main clients
+        shell: bash
+        env:
+          MANIFEST_BRANCH: ${{ vars.MANIFEST_BRANCH || github.event.repository.default_branch }}
+          LEGACY_MANIFEST_BRANCH: feature/multiprovider-and-polish
+        run: |
+          set -euo pipefail
+          SOURCE="$MANIFEST_BRANCH"
+          LEGACY="$LEGACY_MANIFEST_BRANCH"
+          if [ "$SOURCE" = "$LEGACY" ]; then
+            echo "Cabang manifest masih memakai cabang legacy - tidak perlu mirror."
+            exit 0
+          fi
+          git fetch origin "$SOURCE" "$LEGACY"
+          git merge-base --is-ancestor "origin/$LEGACY" "origin/$SOURCE" \
+            || { echo "::error::$LEGACY bukan ancestor $SOURCE - mirror manual diperlukan."; exit 1; }
+          git push origin "origin/$SOURCE:$LEGACY"
+          echo "Manifest dimirror ke $LEGACY untuk klien versi lama."
+
       - name: Create GitHub release (idempotent)
         shell: bash
         env:

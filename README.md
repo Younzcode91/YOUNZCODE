@@ -10,7 +10,9 @@
 ![Dart](https://img.shields.io/badge/Dart-^3.11-0175C2?logo=dart&logoColor=white&style=flat)
 ![Version](https://img.shields.io/badge/versi-1.3.7-16A34A?style=flat)
 ![Platform](https://img.shields.io/badge/Platform-Windows-0EA5E9?style=flat)
-![Tests](https://img.shields.io/badge/test-33+%20file-16A34A?style=flat)
+[![Quality gate](https://github.com/Younzcode91/YOUNZCODE/actions/workflows/quality.yml/badge.svg?branch=main)](https://github.com/Younzcode91/YOUNZCODE/actions/workflows/quality.yml)
+[![Workflow lint](https://github.com/Younzcode91/YOUNZCODE/actions/workflows/workflow-lint.yml/badge.svg?branch=main)](https://github.com/Younzcode91/YOUNZCODE/actions/workflows/workflow-lint.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Agen AI native yang membaca, mencari, dan mengubah kode di workspace-mu —
 menjalankan PowerShell, debugger, browser agent, MCP/add-on, checkpoint perubahan,
