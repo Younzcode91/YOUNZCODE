@@ -39,11 +39,29 @@ Future<Directory> _workflowDir() async {
     ..createSync(recursive: true);
 }
 
+bool _isWorkflowFile(File file) =>
+    file.path.endsWith('.yml') || file.path.endsWith('.yaml');
+
+Iterable<File> _workflowFiles(String path) =>
+    Directory(path).listSync().whereType<File>().where(_isWorkflowFile);
+
 void main() {
+  test('security checks menemukan ekstensi yml dan yaml', () async {
+    final dir = await _workflowDir();
+    File('${dir.path}${Platform.pathSeparator}first.yml').writeAsStringSync('');
+    File(
+      '${dir.path}${Platform.pathSeparator}second.yaml',
+    ).writeAsStringSync('');
+    File('${dir.path}${Platform.pathSeparator}note.txt').writeAsStringSync('');
+
+    final names = _workflowFiles(
+      dir.path,
+    ).map((file) => file.uri.pathSegments.last).toSet();
+    expect(names, {'first.yml', 'second.yaml'});
+  });
+
   test('semua action dipin ke full commit SHA', () {
-    final workflows = Directory(
-      '.github/workflows',
-    ).listSync().whereType<File>().where((file) => file.path.endsWith('.yml'));
+    final workflows = _workflowFiles('.github/workflows');
     final mutableRef = RegExp(r'uses:\s+[^\s]+@(?![0-9a-f]{40}(?:\s|$))');
     for (final workflow in workflows) {
       expect(
@@ -55,9 +73,7 @@ void main() {
   });
 
   test('semua workflow memakai permission default fail-closed', () {
-    final workflows = Directory(
-      '.github/workflows',
-    ).listSync().whereType<File>().where((file) => file.path.endsWith('.yml'));
+    final workflows = _workflowFiles('.github/workflows');
     for (final workflow in workflows) {
       final content = workflow.readAsStringSync().replaceAll(
         String.fromCharCode(13),
