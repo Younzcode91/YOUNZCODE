@@ -40,9 +40,43 @@ Future<Directory> _workflowDir() async {
 }
 
 void main() {
+  test('semua action dipin ke full commit SHA', () {
+    final workflows = Directory(
+      '.github/workflows',
+    ).listSync().whereType<File>().where((file) => file.path.endsWith('.yml'));
+    final mutableRef = RegExp(r'uses:\s+[^\s]+@(?![0-9a-f]{40}(?:\s|$))');
+    for (final workflow in workflows) {
+      expect(
+        workflow.readAsStringSync(),
+        isNot(matches(mutableRef)),
+        reason: '${workflow.path} masih memakai action ref mutable',
+      );
+    }
+  });
+
+  test('semua workflow memakai permission default fail-closed', () {
+    final workflows = Directory(
+      '.github/workflows',
+    ).listSync().whereType<File>().where((file) => file.path.endsWith('.yml'));
+    for (final workflow in workflows) {
+      final content = workflow.readAsStringSync().replaceAll(
+        String.fromCharCode(13),
+        '',
+      );
+      expect(
+        content,
+        contains('permissions:\n  contents: read'),
+        reason: '${workflow.path} tidak membatasi token secara default',
+      );
+    }
+  });
+
   test('release memublikasikan manifest lewat PR yang dilindungi', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
-    expect(workflow, contains('Publish updates.json through a protected-branch PR'));
+    expect(
+      workflow,
+      contains('Publish updates.json through a protected-branch PR'),
+    );
     expect(workflow, contains('gh workflow run quality.yml'));
     expect(workflow, contains('gh workflow run workflow-lint.yml'));
     expect(workflow, contains('gh pr checks "\$PR_URL" --watch --fail-fast'));
@@ -53,7 +87,10 @@ void main() {
   test('release memirror manifest ke branch legacy untuk klien lama', () {
     final workflow = File('.github/workflows/release.yml').readAsStringSync();
     expect(workflow, contains('Mirror manifest for pre-main clients'));
-    expect(workflow, contains('LEGACY_MANIFEST_BRANCH: feature/multiprovider-and-polish'));
+    expect(
+      workflow,
+      contains('LEGACY_MANIFEST_BRANCH: feature/multiprovider-and-polish'),
+    );
     expect(workflow, contains('origin/\$SOURCE:\$LEGACY'));
   });
   test('semua workflow repo valid', () async {

@@ -1,5 +1,8 @@
 name: Release pipeline
 
+permissions:
+  contents: read
+
 # Automated release: on a v* tag, build the Windows installer, hash it, add
 # the release to updates.json, sign it with the surviving signing key(s)
 # restored from repository secrets, verify the signed manifest against the
@@ -51,11 +54,11 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
           cache: true
@@ -127,7 +130,7 @@ jobs:
           cp -r skills release/skills
 
       - name: Compile installer (Inno Setup)
-        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        uses: Minionguyjpro/Inno-Setup-Action@b8e8eb5936437c243592fda645c96dfc6488c275 # v1.2.2
         with:
           path: installer/YOUNZCODE.iss
 
