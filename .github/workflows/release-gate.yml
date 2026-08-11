@@ -1,5 +1,8 @@
 name: Release gate - signing backup
 
+permissions:
+  contents: read
+
 # Every release must be backed up before it is signed. This gate runs on
 # version tags (v*) and fails the run when the signing-key backup receipt
 # (.ci/signing-backup-receipt.json) is missing, stale (older than
@@ -22,13 +25,13 @@ jobs:
     name: Verify signing-key backup receipt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           # Full history + tags so a retirement can be validated against the
           # previous release tag.
           fetch-depth: 0
 
-      - uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
         with:
           channel: stable
           cache: true
